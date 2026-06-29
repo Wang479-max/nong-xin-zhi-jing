@@ -1,0 +1,611 @@
+{
+  "app": {
+    "title": "NongXinZhiJing - Smart Agriculture System",
+    "brand": "NongXinZhiJing",
+    "language_code": "en",
+    "subtitle": "Smart Agriculture",
+    "dashboard": "Dashboard",
+    "monitoring": "Monitoring",
+    "management": "Field Management",
+    "ai": "AI Diagnosis",
+    "knowledge": "Knowledge Base",
+    "news": "News Center",
+    "feedback": "Feedback",
+    "settings": "Settings",
+    "logout": "Logout",
+    "searchPlaceholder": "Search features, plots, or knowledge...",
+    "systemStatus": "System Status",
+    "online": "Ready",
+    "syncing": "Syncing",
+    "offline": "Offline",
+    "currentUser": "Current User",
+    "lastUpdate": "Last Update",
+    "basicPlan": "Basic Plan",
+    "proPlan": "Pro Plan",
+    "enterprisePlan": "Enterprise Plan",
+    "cancel": "Cancel",
+    "weather": {
+      "clear": "Clear",
+      "mostlyClear": "Mostly Clear",
+      "partlyCloudy": "Partly Cloudy",
+      "cloudy": "Cloudy",
+      "fog": "Fog",
+      "drizzle": "Drizzle",
+      "rain": "Rain",
+      "snow": "Snow",
+      "thunderstorm": "Thunderstorm",
+      "unknown": "Unknown"
+    },
+    "year": "Year",
+    "month": "Month",
+    "close": "Close",
+    "unknownError": "Unknown error"
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": "Profile",
+    "notifications": "Notifications",
+    "appearance": "Appearance",
+    "ai": "AI Engine",
+    "security": "Security",
+    "language": "Language",
+    "theme": {
+      "title": "Theme Mode",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "save": "Save Settings",
+    "saved": "Saved"
+  },
+  "auth": {
+    "brand": "NongXinZhiJing",
+    "subtitle": "Smart Agri Engine",
+    "slogan1": "Smart Farm",
+    "slogan2": "Core Future",
+    "description": "Modern agricultural digital engine based on deep learning and multi-dimensional sensor networks, providing you with a 24/7, high-precision farm twin management experience.",
+    "loginTitle": "Terminal Authentication",
+    "registerTitle": "Register Terminal",
+    "loginDesc": "Enter your credentials to access the system",
+    "registerDesc": "Create your digital agriculture management account",
+    "loginTab": "Login",
+    "registerTab": "Register",
+    "usernameLabel": "Terminal ID / Username",
+    "passwordLabel": "Security Key / Password",
+    "usernamePlaceholder": "Username",
+    "passwordPlaceholder": "Password",
+    "rememberMe": "Keep Connected",
+    "forgotPassword": "Reset Key?",
+    "roleLabel": "Assign Permission Level",
+    "roleUser": "Standard",
+    "roleExpert": "Expert",
+    "roleAdmin": "Admin",
+    "loginBtn": "Authorize Access",
+    "registerBtn": "Initialize Terminal",
+    "verifying": "Verifying...",
+    "externalApi": "External API",
+    "sso": "Enterprise SSO",
+    "hardwareKey": "Hardware Key",
+    "footer": "Advanced Agri Terminal",
+    "errorEmpty": "Please enter username and password",
+    "errorNetwork": "Network error, please check terminal connection"
+  },
+  "dashboard": {
+    "widgets": {
+      "stats": "Core Stats",
+      "chart": "Trends",
+      "plots": "Plot Status",
+      "weather": "Weather",
+      "logs": "System Logs",
+      "map": "Farm Map",
+      "intelligence": "Agri Intelligence",
+      "actions": "Quick Actions",
+      "desc": {
+        "stats": "Real-time temp, humidity, light data",
+        "chart": "24h environmental fluctuation charts",
+        "plots": "List of crop growth and soil conditions",
+        "weather": "Current weather and 3-day forecast",
+        "logs": "Automation logs and AI diagnostic records",
+        "map": "Geographic distribution and real-time status",
+        "intelligence": "Seasonal reminders and industry topics",
+        "actions": "Pest identification and encyclopedia"
+      }
+    },
+    "location_default": "Current Location",
+    "customize": "Customize Layout",
+    "save_layout": "Save Layout",
+    "reset_layout": "Reset Layout",
+    "advice": {
+      "loading": "Loading data...",
+      "wind": "Current wind speed is high. Please reinforce greenhouses and facilities.",
+      "uv": "UV index is extremely high. Reduce outdoor work or use protection.",
+      "rain": "Rain expected today. Please clear drainage ditches.",
+      "temp_high": "High temperature. Increase irrigation frequency to prevent dehydration.",
+      "temp_low": "Low temperature. Ensure greenhouse insulation to prevent frost.",
+      "default": "Climate conditions are favorable. Continue daily management as planned."
+    }
+  },
+  "monitoring": {
+    "title": "Monitoring",
+    "realtime": "Real-time Data",
+    "history": "History",
+    "analysis": "Trend Analysis",
+    "params": {
+      "temperature": "Air Temp",
+      "humidity": "Air Humidity",
+      "soilMoisture": "Soil Moisture",
+      "light": "Light Intensity",
+      "co2": "CO2 Level",
+      "soilPh": "Soil pH",
+      "soilTemp": "Soil Temp",
+      "nitrogen": "Nitrogen(N)",
+      "phosphorus": "Phosphorus(P)",
+      "potassium": "Potassium(K)"
+    },
+    "chart": {
+      "line": "Line Chart",
+      "bar": "Bar Chart",
+      "allPlots": "Average Trend of All Plots",
+      "trendAnalysis": "{{name}} Trend Analysis",
+      "range": {
+        "1d": "24 Hours",
+        "7d": "Last 7 Days",
+        "30d": "Last 30 Days"
+      }
+    },
+    "calibration": {
+      "title": "Sensor Calibration",
+      "reason": "Calibration Reason",
+      "reason_placeholder": "Enter calibration reason...",
+      "calibrating": "Calibrating...",
+      "confirm": "Confirm Calibration",
+      "success": "Calibration Success",
+      "successMsg": "{{param}} calibrated to {{value}}{{unit}}",
+      "fail": "Calibration Failed",
+      "failReason": "Please enter calibration reason"
+    },
+    "export": {
+      "button": "Export Excel",
+      "success": "Export Success",
+      "successMsg": "Successfully exported {{count}} records to Excel",
+      "fail": "Export Failed",
+      "noData": "No historical data to export",
+      "error": "Error occurred during export",
+      "sheetName": "Historical Monitoring Data",
+      "filename": "{{name}}_Historical_Monitoring_{{date}}.xlsx"
+    },
+    "warnings": {
+      "lowNitrogen": "Nitrogen level is low ({{value}}mg/kg). Urea supplement recommended.",
+      "lowPhosphorus": "Phosphorus level is low ({{value}}mg/kg). Phosphorus fertilizer recommended.",
+      "lowPotassium": "Potassium level is low ({{value}}mg/kg). Potassium fertilizer recommended.",
+      "title": "{{name}} - {{param}} Warning"
+    },
+    "empty": {
+      "title": "No Monitoring Data",
+      "desc": "You haven't added any plots yet. Please go to 'Field Management' to add plots and connect devices to see real-time data.",
+      "action": "Go to Field Management"
+    },
+    "sidebar": {
+      "currentPlot": "Current Plot",
+      "desc": "Switch plots to view real-time data for different areas",
+      "allPlots": "Average of All Plots"
+    },
+    "inactive": {
+      "title": "Monitoring Inactive",
+      "desc": "This plot is not connected to real IoT devices. To get real-time data and historical trends, please deploy devices in 'Field Management'.",
+      "action": "Waiting for sensor connection"
+    },
+    "table": {
+      "time": "Time",
+      "temp": "Temp",
+      "humidity": "Hum",
+      "light": "Light",
+      "soilTemp": "Soil T",
+      "soilMoisture": "Soil H",
+      "nitrogen": "N",
+      "phosphorus": "P",
+      "potassium": "K",
+      "action": "Action",
+      "detail": "Detail",
+      "pageInfo": "Page {{current}} / {{total}}"
+    },
+    "detail": {
+      "title": "Monitoring Detail - {{time}}",
+      "status": {
+        "normal": "Normal",
+        "low": "Low",
+        "high": "High"
+      }
+    }
+  },
+  "management": {
+    "title": "Field Management",
+    "subtitle": "Plot Assets & Automation Control",
+    "list": {
+      "title": "Plot List",
+      "count": "{{count}} Plots",
+      "addPlot": "Add New Plot"
+    },
+    "stats": {
+      "soilMoisture": "Soil Moisture",
+      "envTemp": "Env Temp",
+      "simulated": "Simulated",
+      "yoy": "+12.5% YoY",
+      "estimatedRevenue": "Est. Revenue",
+      "totalArea": "Total Managed Area",
+      "currentArea": "Current Plot Area",
+      "activeDevices": "Active Devices",
+      "unitArea": "Mu",
+      "unitDevice": "Units",
+      "unitCurrency": "CNY"
+    },
+    "ai": {
+      "title": "AI Decision Support",
+      "subtitle": "Planting suggestions based on plot status",
+      "placeholder": "Enter crop for targeted analysis...",
+      "targetAnalyze": "Targeted Analysis",
+      "smartRecommend": "Smart Recommend",
+      "analyzing": "AI Deep Inference in Progress",
+      "analyzingDesc": "Performing multi-dimensional inference combining soil moisture, climate trends, and historical yield data. Estimated 3-5 seconds...",
+      "bestRecommend": "AI Best Recommendation",
+      "plotId": "Plot ID",
+      "suggestedCrop": "Suggested Crop",
+      "matchingDegree": "Matching Degree",
+      "highConfidence": "High Confidence",
+      "confidenceLevel": "Confidence Level",
+      "revenueComparison": "Revenue Comparison (CNY)",
+      "altAnalysis": "Alternative Analysis",
+      "comparisonSummary": "Recommended {{recommended}} increases average revenue by {{profitInc}} and reduces risk by {{riskDec}} compared to alternatives.",
+      "readyTitle": "Ready for AI Decision?",
+      "readyDesc": "Click 'Smart Recommend' or enter a crop you're interested in, and AI will analyze the best planting strategy for this plot.",
+      "startAnalysis": "Start Analysis Now"
+    },
+    "hardware": {
+      "unavailable": "Hardware Control Unavailable",
+      "desc": "Remote control requires connection to real automated actuators (e.g., valves, fans).",
+      "config": "Config Hardware Connection",
+      "remoteTitle": "Remote Hardware Control",
+      "remoteSubtitle": "Real-time adjustment of plot parameters",
+      "irrigation": "Smart Irrigation",
+      "irrigationDesc": "Adjust soil and environment humidity",
+      "ventilation": "Ventilation System",
+      "ventilationDesc": "Reduce environment temp and humidity",
+      "heating": "Environment Heating",
+      "heatingDesc": "Increase environment and soil temp",
+      "lighting": "Smart Lighting",
+      "lightingDesc": "Adjust light intensity and duration",
+      "fertilizationTitle": "Auto Fertilization System",
+      "fertilizationSubtitle": "Precise soil nutrient supplement",
+      "fertilizationActive": "Fertilization task in progress, NPK levels are rising...",
+      "fertilizationInactive": "Click the button below to start the auto fertilization system and supplement missing soil nutrients.",
+      "fertilizing": "Fertilizing...",
+      "startFertilization": "Start Auto Fertilization",
+      "active": "Active",
+      "start": "Start",
+      "devices": {
+        "sensorHub": {
+          "name": "All-in-One Sensor Hub",
+          "desc": "Monitor Temp, Humidity, Light, CO2"
+        },
+        "soilProbe": {
+          "name": "Multi-layer Soil Probe",
+          "desc": "Monitor Soil Temp, Hum, pH, NPK"
+        },
+        "irrigationValve": {
+          "name": "Smart Pulse Valve",
+          "desc": "Remote precise irrigation control"
+        },
+        "ventilationSystem": {
+          "name": "Variable Freq Ventilation",
+          "desc": "Auto adjust greenhouse air cycle"
+        },
+        "lightingArray": {
+          "name": "Full Spectrum Light Array",
+          "desc": "Simulate sunlight for growth"
+        },
+        "fertilizerInjector": {
+          "name": "Auto Fertilizer Injector",
+          "desc": "Precise nutrient ratio control"
+        }
+      }
+    },
+    "modals": {
+      "addTitle": "Add New Plot",
+      "plotName": "Plot Name",
+      "plotNamePlaceholder": "e.g., Plot #4 - West Zone",
+      "plotArea": "Land Area (Mu)",
+      "plotAreaPlaceholder": "Enter area",
+      "currentCrop": "Current Crop",
+      "currentCropPlaceholder": "e.g., Wheat",
+      "nextTillage": "Next Tillage Date",
+      "confirmAdd": "Confirm Add",
+      "tutorialTitle": "Newbie Guide: How to choose devices?",
+      "tutorialDesc": "To make your farm truly intelligent, you need to select at least one sensor (for data collection) and one automated device (for execution). After selection, the system will exit simulation mode and start receiving real data with AI support.",
+      "tutorialConfirm": "I Understand",
+      "connectTitle": "Connect Smart Agri Devices",
+      "connectSubtitle": "Select IoT hardware to deploy to {{name}}",
+      "connecting": "Establishing encrypted connection...",
+      "confirmConnect": "Confirm Deployment & Connect",
+      "limitTitle": "Plot Limit Reached",
+      "limitMessage": "Your {{plan}} subscription has reached the plot limit. Please upgrade to add more plots."
+    },
+    "connectDevice": "Connect Device",
+    "status": {
+      "warning": "Warning",
+      "danger": "Danger"
+    }
+  },
+  "ai_recognition": {
+    "title": "AI Diagnosis",
+    "types": {
+      "pest": "Pest & Disease",
+      "species": "Species ID",
+      "growth": "Growth Analysis",
+      "disease": "Disease Diagnosis"
+    },
+    "upload": "Upload or Take Photo",
+    "analyzing": "Analyzing...",
+    "result": "Diagnosis Result",
+    "confidence": "Confidence",
+    "suggestions": "Expert Advice",
+    "report": "Detailed Report",
+    "steps": {
+      "upload": "Uploading and preprocessing image...",
+      "vision": "Zhipu AI vision model identifying features...",
+      "deep": "Qwen AI performing deep pathology analysis...",
+      "collaborative": "Summarizing multi-model diagnosis...",
+      "report": "Generating final diagnosis report & advice..."
+    },
+    "plot_steps": [
+      "Fetching real-time plot data...",
+      "Analyzing soil nutrients & env matching...",
+      "Zhipu AI generating planting advice & ROI...",
+      "Generating precision fertilization plan..."
+    ],
+    "mic_denied": {
+      "title": "Microphone Permission Denied",
+      "message": "Unable to access microphone. If you are in the preview window, please click 'Open in new tab' at the top right and try again, or allow microphone permission in browser settings."
+    },
+    "browser_unsupported": {
+      "title": "Browser Not Supported",
+      "message": "Your browser does not support speech recognition. Please use Chrome or Edge."
+    },
+    "errors": {
+      "quota": {
+        "title": "API Quota Exhausted",
+        "desc": "The default API quota has been exhausted, or your personal API Key balance is insufficient.",
+        "tips": [
+          "Configure your own Alibaba Cloud and Zhipu AI API Keys in settings",
+          "Check if your API Key account balance is sufficient",
+          "Contact admin to upgrade your account plan"
+        ],
+        "action": "Configure API Key"
+      },
+      "invalid_key": {
+        "title": "Invalid API Key",
+        "desc": "The configured API Key may have expired, been disabled, or entered incorrectly.",
+        "tips": [
+          "Check if the API Key in settings is correct",
+          "Go to Alibaba Cloud or Zhipu AI console to confirm Key status",
+          "Try generating and configuring a new API Key"
+        ],
+        "action": "Check Settings"
+      },
+      "network": {
+        "title": "Network Connection Error",
+        "desc": "Unable to connect to AI analysis server. Please check your network environment.",
+        "tips": [
+          "Check if your internet connection is normal",
+          "If you use a proxy, try closing it or changing nodes",
+          "Try again later, the server might be under maintenance"
+        ],
+        "action": "Retry Now"
+      },
+      "unknown": {
+        "title": "Analysis Process Error",
+        "tips": [
+          "Try refreshing the page and re-uploading image",
+          "Ensure image is clear and contains obvious agri features",
+          "If the problem persists, contact technical support"
+        ],
+        "action": "Retry Now"
+      }
+    },
+    "labels": {
+      "upload": "Upload Image",
+      "camera": "Take Photo",
+      "title": "Identify Crops",
+      "desc": "Support drag and drop or click to upload. Clear details recommended.\nJPG, PNG format, max 5MB",
+      "decision": "Plot Smart Decision",
+      "ready": "Data Ready",
+      "select_plot": "Select Plot",
+      "usage_title": "AI Recognition Quota",
+      "usage_unlimited": "Personal Key Configured (Unlimited)",
+      "usage_public": "Public Trial Quota ({{count}} used)",
+      "usage_warning": "Public quota is limited. Recommend configuring personal API Key.",
+      "usage_action": "Configure Personal Key for Unlimited Access",
+      "start_analysis": "Start AI Analysis",
+      "analyzing_deep": "Deep analyzing...",
+      "cancel": "Cancel",
+      "suggestions": "Suggestions",
+      "history_title": "Recognition History",
+      "no_history": "No history records",
+      "unknown_plot": "Unknown",
+      "plot_prefix": "Plot #",
+      "waiting_title": "Waiting for Analysis",
+      "waiting_desc": "Upload a photo and select analysis type, AI will provide a detailed diagnosis report",
+      "loading_plot_desc": "Connecting to sensors and plot database, loading AI decision models...",
+      "loading_image_desc": "Multi-engine collaborative diagnosis, generating expert report...",
+      "recommended_crop": "Recommended Crop",
+      "suitability": "Overall Suitability",
+      "plot_label": "Plot: ",
+      "profit": "Expected Profit",
+      "profit_desc": "Estimated based on market trends and plot capacity",
+      "alternatives": "Alternative Crops",
+      "fertilization_title": "AI Precision Fertilization Advice",
+      "fertilization_desc": "Based on real-time nutrient data and growth stage",
+      "fertilization_amount": "Recommended Amount",
+      "fertilization_timing": "Best Timing",
+      "expert_analysis": "Expert Analysis:",
+      "confidence_label": "Confidence",
+      "simulated": "Simulated Diagnosis",
+      "collaborative_label": "Zhipu AI Enhanced",
+      "treatment_suggestions": "Treatment Suggestions",
+      "detailed_report": "Detailed Report",
+      "no_suggestions": "No specific suggestions, please refer to the detailed report.",
+      "smart_decision": "Smart Decision Linkage",
+      "smart_decision_desc_danger": "System detected serious {{type}} risk ({{target}}). Recommend immediate intervention based on the report, and check environment alerts for Plot #{{plot}}.",
+      "smart_decision_desc_warning": "System identified potential warning for {{target}}. Recommend increasing inspection frequency for Plot #{{plot}} and refer to expert report.",
+      "smart_decision_desc_success": "Plot #{{plot}} {{target}} is currently in good status. Recommend maintaining current automated strategies and regular visual checks.",
+      "go_to_management_btn": "Manage",
+      "view_wiki": "Wiki",
+      "diagnosis_conclusion": "Comprehensive Diagnosis & Analysis",
+      "download_report": "Download Report",
+      "qwen_engine": "Alibaba Qwen-VL-Plus Vision Model",
+      "zhipu_engine": "Zhipu GLM-4V-Flash Multimodal Model",
+      "no_qwen_data": "No preliminary identification data found",
+      "no_zhipu_data": "Extracting visual features...",
+      "related_knowledge": "Related Knowledge & Advice",
+      "unknown_target": "Unknown Target"
+    },
+    "modals": {
+      "plot_not_configured_title": "Plot Not Configured",
+      "plot_not_configured_message": "This plot is not configured. Please connect devices in 'Field Management' first.",
+      "go_to_management": "Go to Field Management"
+    }
+  },
+  "knowledge": {
+    "title": "Knowledge Base",
+    "search": "Search agri knowledge...",
+    "categories": {
+      "all": "All",
+      "pest": "Pest & Disease",
+      "planting": "Planting Tech",
+      "policy": "Agri Policy",
+      "market": "Market Info"
+    },
+    "ai_parse": "AI Deep Parse",
+    "related": "Related Knowledge",
+    "share": {
+      "title": "Share Knowledge",
+      "desc": "Scan QR code or copy link to share",
+      "copy": "Copy Link",
+      "copied": "Link Copied",
+      "scan": "Scan to Share",
+      "scan_desc": "Scan and share to your feed",
+      "done": "Done",
+      "brand": "NongXinZhiJing · Knowledge Share"
+    },
+    "bookmarks": "My Bookmarks",
+    "no_bookmarks": "No bookmarked content",
+    "history": "Search History",
+    "clear_history": "Clear History",
+    "load_more": "Load More",
+    "no_more": "No more content",
+    "refresh": "Refresh",
+    "seasonal_tips": {
+      "spring": "Spring plowing, focus on wheat topdressing and fruit tree pruning.",
+      "summer": "Summer harvest and planting, focus on drainage, drought prevention and pests.",
+      "autumn": "Autumn harvest, prepare for grain storage and winter wheat sowing.",
+      "winter": "Winter maintenance, strengthen greenhouse insulation and machinery repair.",
+      "focus": "Large temperature fluctuations, focus on wind and cold protection for facilities.",
+      "month_focus": "Monthly Focus"
+    }
+  },
+  "news": {
+    "title": "News Center",
+    "subtitle": "Real-time monitoring of global agri dynamics",
+    "categories": {
+      "all": "All News",
+      "policy": "Policy",
+      "market": "Market",
+      "tech": "Tech"
+    },
+    "detail": {
+      "placeholder": "[{{source}} Real-time Report]\n\nDetails about '{{title}}' are being synced. Since this info comes from an external authority, you can click the button below to visit the original page for full details.\n\nNongXinZhiJing will continue to monitor industry dynamics and provide the most accurate agri intelligence.",
+      "visit_original": "Visit Original",
+      "back_to_list": "Back to List",
+      "unknown_source": "Unknown Source"
+    },
+    "empty": "No relevant news",
+    "error": "Failed to fetch news, please try again later"
+  },
+  "ai_assistant": {
+    "welcome": "Hello! I am your AI Agriculture Assistant. You can ask me about planting techniques, pest control, or current plot monitoring data.",
+    "placeholder": "Type your question...",
+    "voice_settings": "Voice Settings",
+    "auto_speak": "Auto-speak replies",
+    "announce_notifications": "Announce notifications",
+    "speech_rate": "Speed",
+    "speech_pitch": "Pitch",
+    "voice_select": "Select Voice",
+    "listening": "Listening...",
+    "stop_listening": "Stop Listening",
+    "system_notification": "System Notification: ",
+    "warning_notification": "Field Warning: ",
+    "error_notification": "System Error: ",
+    "success_notification": "Success Hint: ",
+    "mic_permission_denied": {
+      "title": "Microphone Permission Denied",
+      "message": "Unable to access microphone. If you are in the preview window, please click 'Open in new tab' at the top right and try again, or allow microphone permission in browser settings."
+    },
+    "browser_not_supported": {
+      "title": "Browser Not Supported",
+      "message": "Your browser does not support speech recognition. Please use Chrome or Edge."
+    },
+    "suggestions": [
+      "How to prevent wheat powdery mildew?",
+      "Analyze the soil moisture of the current plot",
+      "Recommend economic crops suitable for spring planting",
+      "Generate a farming suggestion report for this week"
+    ],
+    "errors": {
+      "quota": {
+        "title": "API Quota Exhausted",
+        "desc": "The default API quota has been exhausted, or your personal API Key balance is insufficient.",
+        "tips": [
+          "Configure your own Zhipu AI API Key in settings",
+          "Check if your API Key account balance is sufficient"
+        ],
+        "action": "Configure API Key"
+      },
+      "invalid_key": {
+        "title": "Invalid API Key",
+        "desc": "The configured API Key may have expired, been disabled, or entered incorrectly.",
+        "tips": [
+          "Check if the API Key in settings is correct",
+          "Go to Zhipu AI console to confirm Key status"
+        ],
+        "action": "Check Settings"
+      },
+      "network": {
+        "title": "Network Connection Error",
+        "desc": "Unable to connect to AI Assistant server. Please check your network environment.",
+        "tips": [
+          "Check if your internet connection is normal",
+          "Try again later, the server might be under maintenance"
+        ],
+        "action": "Retry Now"
+      },
+      "unknown": {
+        "title": "Assistant is on Strike",
+        "tips": [
+          "Try refreshing the page and asking again",
+          "If the problem persists, contact technical support"
+        ],
+        "action": "Retry Now"
+      }
+    },
+    "thinking": "AI is thinking...",
+    "tooltips": {
+      "announce_on": "Enable notification announcement",
+      "announce_off": "Disable notification announcement",
+      "speak_on": "Enable dialogue voice announcement",
+      "speak_off": "Disable dialogue voice announcement",
+      "settings": "Voice Settings",
+      "respeak": "Re-speak",
+      "mic_on": "Voice Input",
+      "mic_off": "Stop Recording"
+    }
+  }
+}

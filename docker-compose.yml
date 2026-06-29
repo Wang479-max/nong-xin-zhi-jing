@@ -1,0 +1,26 @@
+# 农芯智境 · 一键容器化部署
+services:
+  nong-xin-zhi-jing:
+    build: .
+    image: nong-xin-zhi-jing:latest
+    container_name: nxzj
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # 接口限流阈值（每 IP 每分钟），可按压测目标调整
+      - RATE_LIMIT_PER_MIN=1200
+    # 从 .env 读取 AI 密钥（QWEN_API_KEY / ZHIPU_AI_KEY），密钥不入镜像
+    env_file:
+      - .env
+    volumes:
+      # 持久化文件型数据库，容器重建不丢数据
+      - ./.data:/app/.data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

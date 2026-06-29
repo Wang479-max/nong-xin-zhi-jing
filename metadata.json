@@ -1,0 +1,13 @@
+{
+  "name": "农芯智境 - 智慧农业管理系统",
+  "description": "PC端农业智能检测平台，包含农田检测、管理、AI识别、知识库及资讯模块。",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone",
+    "camera"
+  ],
+  "aiProviders": [
+    "ZHIPU_AI",
+    "QWEN_DASHSCOPE"
+  ]
+}

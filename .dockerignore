@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.env
+.data
+*.log
+npm-debug.log*
+.vscode
+.idea
+.DS_Store
+scratchpad

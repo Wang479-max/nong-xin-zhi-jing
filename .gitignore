@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Local Data
+.data
+nxzj_db.json
+sync.lock
+
+# 打包副本与桌面版（与网站部署无关，避免仓库臃肿）
+源码/
+desktop/
