@@ -171,6 +171,19 @@ export class PgSaasRepository implements SaasRepository {
     };
   }
 
+  async setUserPlatformRole(userId: string, role: PlatformRole): Promise<User> {
+    const result = await this.database.query<Row>(
+      `/* set-user-platform-role */
+       UPDATE users SET platform_role = $2, updated_at = now()
+       WHERE id = $1
+       RETURNING id, normalized_username, platform_role, created_at`,
+      [userId, role],
+    );
+    const row = result.rows[0];
+    if (!row) throw new SaasDomainError('USER_NOT_FOUND', 'User was not found.');
+    return mapUser(row);
+  }
+
   async saveRefreshSession(session: RefreshSession): Promise<void> {
     await this.database.query(
       `/* save-refresh-session */

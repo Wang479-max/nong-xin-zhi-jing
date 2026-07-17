@@ -4,6 +4,8 @@ import type {
   Product,
   RefreshSession,
   UserContext,
+  User,
+  PlatformRole,
   UserWithCredential,
 } from './types';
 
@@ -11,6 +13,7 @@ export interface SaasRepository {
   createUserWithOrganization(input: { username: string; passwordHash: string }): Promise<UserContext>;
   findUserByUsername(username: string): Promise<UserWithCredential | null>;
   findUserContext(userId: string): Promise<UserContext | null>;
+  setUserPlatformRole(userId: string, role: PlatformRole): Promise<User>;
   saveRefreshSession(session: RefreshSession): Promise<void>;
   findRefreshSession(tokenHash: string): Promise<RefreshSession | null>;
   revokeRefreshSession(tokenHash: string): Promise<void>;

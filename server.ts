@@ -7,6 +7,7 @@ import fs from 'fs';
 import os from 'os';
 import cron from 'node-cron';
 import { WebSocketServer, WebSocket } from 'ws';
+import { createSaasRuntimeFromEnv } from './server/saas/index.ts';
 import { getUnifiedCrawledKnowledge, REAL_DEEP_LINKED_FALLBACKS, REAL_TIANXING_FALLBACKS, generateExtendedNewsPool, PRESET_IMGS, crawlMoa, getDetailedContent } from './crawlerService.ts';
 import {
   PLAN_DEFS, PRODUCTS, VALUE_SERVICES, PAYMENT_PROVIDERS,
@@ -159,6 +160,61 @@ async function startServer() {
   // 优先使用环境变量指定的端口，未设置时默认 3000；若端口被占用则自动改用空闲端口。
   const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
+  // Shared API protections must run before the versioned router can terminate a request.
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Permissions-Policy', 'geolocation=(self), microphone=(self), camera=(self)');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'; object-src 'none'; base-uri 'self'");
+    if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+      res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+    }
+    next();
+  });
+
+  const RATE_WINDOW_MS = 60 * 1000;
+  const RATE_MAX = Number(process.env.RATE_LIMIT_PER_MIN || 1200);
+  const rateBuckets = new Map<string, number[]>();
+  setInterval(() => {
+    const cutoff = Date.now() - RATE_WINDOW_MS;
+    for (const [ip, hits] of rateBuckets) {
+      const kept = hits.filter((time) => time > cutoff);
+      if (kept.length) rateBuckets.set(ip, kept); else rateBuckets.delete(ip);
+    }
+  }, RATE_WINDOW_MS).unref?.();
+
+  app.use('/api', (req, res, next) => {
+    if (req.path === '/health') return next();
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+      || req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const hits = (rateBuckets.get(ip) || []).filter((time) => time > now - RATE_WINDOW_MS);
+    hits.push(now);
+    rateBuckets.set(ip, hits);
+    res.setHeader('X-RateLimit-Limit', String(RATE_MAX));
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, RATE_MAX - hits.length)));
+    if (hits.length > RATE_MAX) {
+      res.setHeader('Retry-After', '60');
+      return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试', code: 'RATE_LIMITED' });
+    }
+    next();
+  });
+
+  app.use((req, res, next) => {
+    if (!req.path.startsWith('/api')) return next();
+    const start = process.hrtime.bigint();
+    res.on('finish', () => {
+      const ms = Number(process.hrtime.bigint() - start) / 1e6;
+      if (ms > 800) console.warn(`[Perf] 慢接口 ${req.method} ${req.originalUrl} ${ms.toFixed(0)}ms -> ${res.statusCode}`);
+    });
+    next();
+  });
+
+  const saasRuntime = await createSaasRuntimeFromEnv(process.env);
+  app.use('/api/v1', saasRuntime.router);
+
   // Use /tmp for serverless environments (Vercel, EdgeOne, etc.)
   // If process.env.USER_DATA_PATH is provided (e.g., by Electron), prioritize it.
   const isServerless = process.env.VERCEL || process.env.NODE_ENV === 'production';
@@ -196,8 +252,8 @@ async function startServer() {
   }
 
   // AI API Keys and Cache
-  const QWEN_API_KEY = process.env.QWEN_API_KEY || 'sk-23b6e78af2564710978297606b56f57d';
-  const ZHIPU_API_KEY = process.env.ZHIPU_AI_KEY || 'd0e6728683544915924b00441d494956.Gkw6q9pqixeWugia';
+  const QWEN_API_KEY = process.env.QWEN_API_KEY?.trim() || '';
+  const ZHIPU_API_KEY = process.env.ZHIPU_AI_KEY?.trim() || '';
   const aiCache = new Map<string, { data: any, timestamp: number }>();
   const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
   const CACHE_VERSION = 'v2'; // Increment this when changing response structure
@@ -205,65 +261,6 @@ async function startServer() {
   // Increase payload limit for base64 image uploads
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
-
-  // ==========================================================================
-  // 安全与健壮性中间件（4C 评审：技-安全防护 / 健-系统稳定性）
-  // ==========================================================================
-
-  // 1) 安全响应头：防点击劫持、MIME 嗅探、跨域信息泄露（不设严格 CSP 以兼容 Cesium/Worker/WASM）
-  app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Permissions-Policy', 'geolocation=(self), microphone=(self), camera=(self)');
-    // 仅启用不影响脚本/样式/Worker 加载的安全指令，避免误伤 3D 与可视化资源
-    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'; object-src 'none'; base-uri 'self'");
-    if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
-      res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
-    }
-    next();
-  });
-
-  // 2) 轻量级 IP 限流（滑动窗口，内存级）：防接口刷量 / DoS，保障并发稳定
-  const RATE_WINDOW_MS = 60 * 1000;
-  const RATE_MAX = Number(process.env.RATE_LIMIT_PER_MIN || 1200); // 每 IP 每分钟上限（演示宽松）
-  const rateBuckets = new Map<string, number[]>();
-  setInterval(() => {
-    const cutoff = Date.now() - RATE_WINDOW_MS;
-    for (const [ip, hits] of rateBuckets) {
-      const kept = hits.filter((t) => t > cutoff);
-      if (kept.length) rateBuckets.set(ip, kept); else rateBuckets.delete(ip);
-    }
-  }, RATE_WINDOW_MS).unref?.();
-
-  app.use('/api', (req, res, next) => {
-    if (req.path === '/health') return next(); // 健康检查不限流
-    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || req.socket.remoteAddress || 'unknown';
-    const now = Date.now();
-    const hits = (rateBuckets.get(ip) || []).filter((t) => t > now - RATE_WINDOW_MS);
-    hits.push(now);
-    rateBuckets.set(ip, hits);
-    const remaining = Math.max(0, RATE_MAX - hits.length);
-    res.setHeader('X-RateLimit-Limit', String(RATE_MAX));
-    res.setHeader('X-RateLimit-Remaining', String(remaining));
-    if (hits.length > RATE_MAX) {
-      res.setHeader('Retry-After', '60');
-      return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试', code: 'RATE_LIMITED' });
-    }
-    next();
-  });
-
-  // 3) 接口耗时埋点：慢请求(>800ms)落日志，便于性能瓶颈定位与优化
-  app.use((req, res, next) => {
-    if (!req.path.startsWith('/api')) return next();
-    const start = process.hrtime.bigint();
-    res.on('finish', () => {
-      const ms = Number(process.hrtime.bigint() - start) / 1e6;
-      if (ms > 800) console.warn(`[Perf] 慢接口 ${req.method} ${req.originalUrl} ${ms.toFixed(0)}ms -> ${res.statusCode}`);
-    });
-    next();
-  });
 
   // --- 模拟后端数据库/硬件状态 ---
   let users: any[] = [];
@@ -552,7 +549,6 @@ async function startServer() {
     users = [
       { 
         username: 'admin', 
-        password: 'password123', 
         role: '管理员',
         plan: '企业版',
         aiRecognitionCount: 0,
@@ -2516,7 +2512,7 @@ async function startServer() {
       let resultText = "";
       
       let finalReportResponse;
-      const activeQwenKey = process.env.QWEN_API_KEY || 'sk-23b6e78af2564710978297606b56f57d';
+      const activeQwenKey = process.env.QWEN_API_KEY?.trim() || '';
       const traceId = crypto.randomUUID();
 
       if (!isZhipuMissing) {
@@ -2884,7 +2880,7 @@ async function startServer() {
 
       res.json({ text: resultText, _optimizationTriggered: data._optimizationTriggered });
     } catch (error: any) {
-      const isNetworkIssue = error.message?.includes('网络优化') || error.message?.includes('网络波动') || error.message?.includes('超时') || error.message?.includes('fetch failed');
+      const isNetworkIssue = !activeZhipuKey || error.message?.includes('网络优化') || error.message?.includes('网络波动') || error.message?.includes('超时') || error.message?.includes('fetch failed');
       
       if (isNetworkIssue) {
         console.log(`[AI Chat] Applying connectivity fallback (Reason: ${error.message})`);
@@ -2906,7 +2902,8 @@ async function startServer() {
     }
 
     try {
-      const activeQwenKey = process.env.QWEN_API_KEY || 'sk-23b6e78af2564710978297606b56f57d';
+      const activeQwenKey = process.env.QWEN_API_KEY?.trim() || '';
+      if (!activeQwenKey) throw new Error('QWEN_API_KEY is not configured.');
       const prompt = `你是一个专业的智能农业AI助手。请听取这段田间巡视语音备忘录，并完成以下任务：
 1. 准确将语音内容转录为文本。如果录音背景有嘈杂声，请过滤并提取核心表达。
 2. 将转录出的内容进行深度分析，并生成一份极其专业、结构化、美观的高可读性田间巡检诊断报告。
@@ -2954,7 +2951,7 @@ async function startServer() {
       const parsedResult = JSON.parse(responseText);
       res.json({ success: true, ...parsedResult });
     } catch (error: any) {
-      const isNetworkIssue = error.message?.includes('网络优化') || error.message?.includes('网络波动') || error.message?.includes('超时') || error.message?.includes('fetch failed');
+      const isNetworkIssue = !process.env.QWEN_API_KEY?.trim() || error.message?.includes('网络优化') || error.message?.includes('网络波动') || error.message?.includes('超时') || error.message?.includes('fetch failed');
       
       if (isNetworkIssue) {
         console.log(`[Voice Memo] Applying connectivity fallback (Reason: ${error.message})`);
@@ -2994,42 +2991,24 @@ async function startServer() {
     }
   });
 
-  app.post('/api/auth/login', (req, res) => {
-    const { username, password } = req.body;
-    const user = users.find(u => u.username === username && u.password === password);
-    if (user) {
-      const { password, ...userWithoutPassword } = user;
-      res.json({ success: true, user: userWithoutPassword, token: 'mock-token' });
-    } else {
-      res.status(401).json({ success: false, message: '账号或密码错误' });
-    }
+  app.post('/api/auth/login', (_req, res) => {
+    res.status(410).json({
+      success: false,
+      error: {
+        code: 'LEGACY_AUTH_DISABLED',
+        message: 'This endpoint is disabled. Use /api/v1/auth/login.',
+      },
+    });
   });
 
-  app.post('/api/auth/register', (req, res) => {
-    const { username, password, role } = req.body;
-    if (users.find(u => u.username === username)) {
-      return res.status(400).json({ success: false, message: '用户名已存在' });
-    }
-    const newUser = { 
-      username, 
-      password, 
-      role: role || '普通用户',
-      name: username,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-      bio: '这位农友很懒，还没有填写简介。',
-      phone: '',
-      email: '',
-      location: '',
-      joinDate: new Date().toISOString().split('T')[0],
-      securityLogs: [{ event: '账号注册', time: new Date().toISOString(), ip: '127.0.0.1' }],
-      favorites: [],
-      twoFactorEnabled: false,
-      plan: 'free',
-      aiRecognitionCount: 0
-    };
-    users.push(newUser); saveData();
-    const { password: _, ...userWithoutPassword } = newUser;
-    res.json({ success: true, user: userWithoutPassword, token: 'mock-token' });
+  app.post('/api/auth/register', (_req, res) => {
+    res.status(410).json({
+      success: false,
+      error: {
+        code: 'LEGACY_AUTH_DISABLED',
+        message: 'This endpoint is disabled. Use /api/v1/auth/register.',
+      },
+    });
   });
 
   // --- 2FA 验证接口 ---
@@ -3336,24 +3315,35 @@ async function startServer() {
   });
 
   let shuttingDown = false;
-  const gracefulShutdown = (signal: string) => {
+  const gracefulShutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[Server] 收到 ${signal}，开始优雅关闭...`);
     try { wss?.clients.forEach((c) => c.close()); } catch {}
-    server.close(() => {
-      console.log('[Server] 已关闭 HTTP 服务，进程退出。');
-      process.exit(0);
+    const httpClosed = new Promise<void>((resolve) => {
+      server.close(() => resolve());
     });
-    // 兜底：5s 内未正常关闭则强制退出
-    setTimeout(() => process.exit(0), 5000).unref?.();
+    const forceExitTimer = setTimeout(() => process.exit(0), 5000);
+    forceExitTimer.unref?.();
+    try {
+      await saasRuntime.close();
+    } catch {
+      console.error('[Server] SaaS runtime shutdown failed.');
+    }
+    await httpClosed;
+    clearTimeout(forceExitTimer);
+    console.log('[Server] 已关闭 HTTP 服务，进程退出。');
+    process.exit(0);
   };
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => { void gracefulShutdown('SIGTERM'); });
+  process.on('SIGINT', () => { void gracefulShutdown('SIGINT'); });
 
   return app;
 }
 
-startServer();
+void startServer().catch(() => {
+  console.error('[Server] Startup failed.');
+  process.exitCode = 1;
+});
 
 export default app;

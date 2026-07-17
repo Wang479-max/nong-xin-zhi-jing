@@ -5,6 +5,7 @@ import {
   type Membership,
   type Order,
   type Organization,
+  type PlatformRole,
   type Product,
   type RefreshSession,
   type User,
@@ -145,6 +146,13 @@ export class MemorySaasRepository implements SaasRepository {
     if (!organization || !entitlement) return null;
 
     return copy({ user: user.user, organization, membership, entitlement });
+  }
+
+  async setUserPlatformRole(userId: string, role: PlatformRole): Promise<User> {
+    const credential = this.usersById.get(userId);
+    if (!credential) throw new SaasDomainError('USER_NOT_FOUND', 'User was not found.');
+    credential.user.platformRole = role;
+    return copy(credential.user);
   }
 
   async saveRefreshSession(session: RefreshSession): Promise<void> {

@@ -3,6 +3,17 @@ import { MemorySaasRepository } from '../../server/saas/memoryRepository';
 import type { Order } from '../../server/saas/types';
 
 describe('MemorySaasRepository', () => {
+  it('promotes an existing user to platform admin and rejects a missing user', async () => {
+    const repo = new MemorySaasRepository();
+    const context = await repo.createUserWithOrganization({ username: 'promote-me', passwordHash: 'hash' });
+
+    await expect(repo.setUserPlatformRole(context.user.id, 'platform_admin')).resolves.toMatchObject({
+      id: context.user.id, platformRole: 'platform_admin',
+    });
+    await expect(repo.findUserContext(context.user.id)).resolves.toMatchObject({ user: { platformRole: 'platform_admin' } });
+    await expect(repo.setUserPlatformRole('missing-user', 'platform_admin')).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+  });
+
   it('normalizes usernames and enforces uniqueness', async () => {
     const repo = new MemorySaasRepository();
     await repo.createUserWithOrganization({ username: ' Farmer ', passwordHash: 'hash' });

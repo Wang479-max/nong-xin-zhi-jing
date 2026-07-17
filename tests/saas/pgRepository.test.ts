@@ -3,6 +3,21 @@ import { PgSaasRepository } from '../../server/saas/db/pgRepository';
 import type { Order } from '../../server/saas/types';
 
 describe('PgSaasRepository', () => {
+  it('promotes a user with a parameterized update and returns a stable missing-user error', async () => {
+    const db = new ScriptedDb(({ tag }) => tag === 'set-user-platform-role' ? [{
+      id: 'user-1', normalized_username: 'admin', platform_role: 'platform_admin', created_at: '2030-01-01T00:00:00.000Z',
+    }] : []);
+    const repository = new PgSaasRepository(db as never);
+
+    await expect(repository.setUserPlatformRole('user-1', 'platform_admin')).resolves.toMatchObject({
+      id: 'user-1', platformRole: 'platform_admin',
+    });
+    expect(db.call('set-user-platform-role')?.values).toEqual(['user-1', 'platform_admin']);
+
+    const missing = new PgSaasRepository(new ScriptedDb(() => []) as never);
+    await expect(missing.setUserPlatformRole('missing', 'platform_admin')).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+  });
+
   it('normalizes username lookup parameters and maps timestamps defensively', async () => {
     const db = new ScriptedDb(({ tag }) => tag === 'find-user-by-username' ? [{
       id: 'user-1', normalized_username: 'farmer', platform_role: 'user',
