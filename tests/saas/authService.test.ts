@@ -155,4 +155,8 @@ describe('auth config', () => {
     expect(() => loadAuthConfig({})).toThrow();
     expect(() => createAuthConfig({ accessTokenSecret: 'short' })).toThrow();
   });
+
+  it('rejects access-token lifetimes other than fifteen minutes', () => {
+    expect(() => createAuthConfig({ accessTokenSecret, accessTokenTtlSeconds: 899 })).toThrow();
+  });
 });

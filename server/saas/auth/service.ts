@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { z } from 'zod';
-import type { AuthConfig } from '../config';
+import { ACCESS_TOKEN_TTL_SECONDS, type AuthConfig } from '../config';
 import type { SaasRepository } from '../repository';
 import type { MembershipRole, PlatformRole, UserContext } from '../types';
 
@@ -147,7 +147,7 @@ export class AuthService {
       membershipRole: context.membership.role,
     }, this.config.accessTokenSecret, {
       algorithm: 'HS256',
-      expiresIn: this.config.accessTokenTtlSeconds,
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
     });
   }
 }
