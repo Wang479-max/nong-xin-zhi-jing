@@ -491,32 +491,37 @@ export class PgSaasRepository implements SaasRepository {
     const injectedClient = 'release' in this.database;
     const client = injectedClient ? this.database as PoolClient : await (this.database as Pool).connect();
     let nestedTransaction = false;
-    if (injectedClient) {
-      try {
-        await client.query('SAVEPOINT saas_repository_transaction');
-        nestedTransaction = true;
-      } catch (error) {
-        if (postgresErrorCode(error) !== '25P01') throw error;
+    let transactionBoundaryStarted = false;
+    try {
+      if (injectedClient) {
+        try {
+          await client.query('SAVEPOINT saas_repository_transaction');
+          nestedTransaction = true;
+        } catch (error) {
+          if (postgresErrorCode(error) !== '25P01') throw error;
+          await client.query('BEGIN');
+        }
+      } else {
         await client.query('BEGIN');
       }
-    } else {
-      await client.query('BEGIN');
-    }
+      transactionBoundaryStarted = true;
 
-    try {
       const result = await operation(client);
       await client.query(nestedTransaction ? 'RELEASE SAVEPOINT saas_repository_transaction' : 'COMMIT');
+      transactionBoundaryStarted = false;
       return result;
     } catch (error) {
-      try {
-        if (nestedTransaction) {
-          await client.query('ROLLBACK TO SAVEPOINT saas_repository_transaction');
-          await client.query('RELEASE SAVEPOINT saas_repository_transaction');
-        } else {
-          await client.query('ROLLBACK');
+      if (transactionBoundaryStarted) {
+        try {
+          if (nestedTransaction) {
+            await client.query('ROLLBACK TO SAVEPOINT saas_repository_transaction');
+            await client.query('RELEASE SAVEPOINT saas_repository_transaction');
+          } else {
+            await client.query('ROLLBACK');
+          }
+        } catch {
+          // Preserve the domain/query error that caused the rollback.
         }
-      } catch {
-        // Preserve the domain/query error that caused the rollback.
       }
       throw error;
     } finally {

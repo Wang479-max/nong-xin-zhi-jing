@@ -112,6 +112,26 @@ describe('PgSaasRepository', () => {
     expect(released).toBe(false);
   });
 
+  it('releases a pool-acquired client when BEGIN fails', async () => {
+    let releases = 0;
+    const commands: string[] = [];
+    const client = {
+      query: async (input: string | { text: string }) => {
+        const text = typeof input === 'string' ? input : input.text;
+        commands.push(text);
+        if (text === 'BEGIN') throw new Error('begin failed');
+        return { rows: [] };
+      },
+      release: () => { releases += 1; },
+    };
+    const pool = { connect: async () => client };
+
+    await expect(new PgSaasRepository(pool as never).createOrder(order())).rejects.toThrow('begin failed');
+    expect(releases).toBe(1);
+    expect(commands).toEqual(['BEGIN']);
+    expect(commands).not.toContain('COMMIT');
+  });
+
   it('makes duplicate refresh-session saves harmless without replacing token ownership', async () => {
     const db = new ScriptedDb(() => []);
 
