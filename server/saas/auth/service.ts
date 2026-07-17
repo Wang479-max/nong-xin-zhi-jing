@@ -47,6 +47,8 @@ export interface AccessTokenClaims {
   org: string;
   platformRole: PlatformRole;
   membershipRole: MembershipRole;
+  iat: number;
+  exp: number;
 }
 
 export interface AuthSessionResult extends UserContext {
@@ -97,15 +99,25 @@ export class AuthService {
     }
     const tokenHash = hashRefreshToken(refreshToken);
     const session = await this.repository.findRefreshSession(tokenHash);
-    if (!session || session.revokedAt !== null || Date.parse(session.expiresAt) <= Date.now()) {
+    const now = Date.now();
+    const expiresAt = session ? Date.parse(session.expiresAt) : Number.NaN;
+    if (!session || session.revokedAt !== null || !Number.isFinite(expiresAt) || expiresAt <= now) {
       throw new AuthError('INVALID_REFRESH_TOKEN');
     }
 
     const context = await this.repository.findUserContext(session.userId);
     if (!context) throw new AuthError('INVALID_REFRESH_TOKEN');
 
-    await this.repository.revokeRefreshSession(tokenHash);
-    return this.createSession(context);
+    const replacementRefreshToken = randomBytes(32).toString('base64url');
+    const consumed = await this.repository.rotateRefreshSession(tokenHash, {
+      tokenHash: hashRefreshToken(replacementRefreshToken),
+      userId: context.user.id,
+      expiresAt: new Date(now + this.config.refreshTokenTtlSeconds * 1_000).toISOString(),
+      revokedAt: null,
+    }, now);
+    if (!consumed) throw new AuthError('INVALID_REFRESH_TOKEN');
+
+    return this.sessionResult(context, replacementRefreshToken);
   }
 
   async logout(refreshToken: unknown): Promise<void> {
@@ -132,6 +144,10 @@ export class AuthService {
       revokedAt: null,
     });
 
+    return this.sessionResult(context, refreshToken);
+  }
+
+  private sessionResult(context: UserContext, refreshToken: string): AuthSessionResult {
     return {
       ...context,
       accessToken: this.signAccessToken(context),
@@ -164,6 +180,11 @@ function isAccessTokenClaims(value: string | JwtPayload): value is AccessTokenCl
   if (typeof value === 'string') return false;
   return typeof value.sub === 'string'
     && typeof value.org === 'string'
+    && typeof value.iat === 'number'
+    && Number.isFinite(value.iat)
+    && typeof value.exp === 'number'
+    && Number.isFinite(value.exp)
+    && value.exp - value.iat === ACCESS_TOKEN_TTL_SECONDS
     && (value.platformRole === 'user' || value.platformRole === 'platform_admin')
     && (value.membershipRole === 'owner'
       || value.membershipRole === 'admin'

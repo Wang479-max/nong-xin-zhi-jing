@@ -59,6 +59,34 @@ describe('MemorySaasRepository', () => {
     expect(await repo.findRefreshSession('token')).toMatchObject({ userId: 'user', revokedAt: expect.any(String) });
   });
 
+  it('atomically rotates only an active session with a valid future expiry', async () => {
+    const repo = new MemorySaasRepository();
+    const session = { tokenHash: 'current', userId: 'user', expiresAt: '2030-01-01T00:00:01.000Z', revokedAt: null };
+    await repo.saveRefreshSession(session);
+
+    const rotated = await repo.rotateRefreshSession('current', {
+      tokenHash: 'replacement', userId: 'user', expiresAt: '2030-02-01T00:00:00.000Z', revokedAt: null,
+    }, Date.parse('2030-01-01T00:00:00.000Z'));
+
+    expect(rotated).toMatchObject({ tokenHash: 'current', revokedAt: expect.any(String) });
+    expect(await repo.findRefreshSession('current')).toMatchObject({ revokedAt: expect.any(String) });
+    expect(await repo.findRefreshSession('replacement')).toMatchObject({ revokedAt: null, userId: 'user' });
+
+    await repo.saveRefreshSession({ tokenHash: 'malformed', userId: 'user', expiresAt: 'not-a-date', revokedAt: null });
+    await expect(repo.rotateRefreshSession('malformed', {
+      tokenHash: 'should-not-save', userId: 'user', expiresAt: '2030-02-01T00:00:00.000Z', revokedAt: null,
+    }, Date.parse('2030-01-01T00:00:00.000Z'))).resolves.toBeNull();
+    expect(await repo.findRefreshSession('malformed')).toMatchObject({ revokedAt: null });
+    await expect(repo.findRefreshSession('should-not-save')).resolves.toBeNull();
+
+    await repo.saveRefreshSession({ tokenHash: 'mismatched', userId: 'user', expiresAt: '2030-01-01T00:00:01.000Z', revokedAt: null });
+    await expect(repo.rotateRefreshSession('mismatched', {
+      tokenHash: 'wrong-user-replacement', userId: 'other-user', expiresAt: '2030-02-01T00:00:00.000Z', revokedAt: null,
+    }, Date.parse('2030-01-01T00:00:00.000Z'))).resolves.toBeNull();
+    expect(await repo.findRefreshSession('mismatched')).toMatchObject({ revokedAt: null });
+    await expect(repo.findRefreshSession('wrong-user-replacement')).resolves.toBeNull();
+  });
+
   it('keeps order IDs and organization-scoped idempotency keys unambiguous', async () => {
     const repo = new MemorySaasRepository();
     const firstContext = await repo.createUserWithOrganization({ username: 'first', passwordHash: 'hash' });

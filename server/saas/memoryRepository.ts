@@ -155,6 +155,34 @@ export class MemorySaasRepository implements SaasRepository {
     if (session) session.revokedAt = new Date().toISOString();
   }
 
+  async rotateRefreshSession(
+    currentTokenHash: string,
+    replacementSession: RefreshSession,
+    now: number,
+  ): Promise<RefreshSession | null> {
+    const current = this.refreshSessionsByTokenHash.get(currentTokenHash);
+    const expiresAt = current ? Date.parse(current.expiresAt) : Number.NaN;
+    const replacementExpiresAt = Date.parse(replacementSession.expiresAt);
+    if (!current
+      || current.revokedAt !== null
+      || !Number.isFinite(now)
+      || !Number.isFinite(expiresAt)
+      || expiresAt <= now
+      || current.userId !== replacementSession.userId
+      || currentTokenHash === replacementSession.tokenHash
+      || replacementSession.revokedAt !== null
+      || !Number.isFinite(replacementExpiresAt)
+      || replacementExpiresAt <= now
+      || this.refreshSessionsByTokenHash.has(replacementSession.tokenHash)) {
+      return null;
+    }
+
+    const consumed = { ...current, revokedAt: new Date(now).toISOString() };
+    this.refreshSessionsByTokenHash.set(currentTokenHash, consumed);
+    this.refreshSessionsByTokenHash.set(replacementSession.tokenHash, copy(replacementSession));
+    return copy(consumed);
+  }
+
   async listProducts(): Promise<Product[]> {
     return copy([...this.productsById.values()]);
   }

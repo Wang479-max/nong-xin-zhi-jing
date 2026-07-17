@@ -14,6 +14,8 @@ export interface SaasRepository {
   saveRefreshSession(session: RefreshSession): Promise<void>;
   findRefreshSession(tokenHash: string): Promise<RefreshSession | null>;
   revokeRefreshSession(tokenHash: string): Promise<void>;
+  /** Atomically consumes an active session and stores its replacement, or returns null without mutation. */
+  rotateRefreshSession(currentTokenHash: string, replacementSession: RefreshSession, now: number): Promise<RefreshSession | null>;
   listProducts(): Promise<Product[]>;
   getEntitlementSnapshot(organizationId: string): Promise<EntitlementSnapshot>;
   findOrderByIdempotencyKey(organizationId: string, key: string): Promise<Order | null>;

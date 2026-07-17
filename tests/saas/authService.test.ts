@@ -114,12 +114,38 @@ describe('AuthService', () => {
     await expect(service.refresh(registered.refreshToken)).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
   });
 
+  it('allows exactly one concurrent refresh-token rotation', async () => {
+    const { service } = createService();
+    const registered = await service.register({ username: 'grower', password });
+
+    const results = await Promise.allSettled([
+      service.refresh(registered.refreshToken),
+      service.refresh(registered.refreshToken),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+      reason: { code: 'INVALID_REFRESH_TOKEN' },
+    });
+  });
+
   it('rejects expired refresh sessions with a stable error', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
     const { service } = createService({ refreshTokenTtlSeconds: 1 });
     const result = await service.register({ username: 'grower', password });
     vi.advanceTimersByTime(1_001);
+
+    await expect(service.refresh(result.refreshToken)).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
+  });
+
+  it('rejects refresh sessions with malformed expiry timestamps', async () => {
+    const { repo, service } = createService();
+    const result = await service.register({ username: 'grower', password });
+    const tokenHash = refreshHash(result.refreshToken);
+    const stored = await repo.findRefreshSession(tokenHash);
+    await repo.saveRefreshSession({ ...stored!, expiresAt: 'not-a-date' });
 
     await expect(service.refresh(result.refreshToken)).rejects.toMatchObject({ code: 'INVALID_REFRESH_TOKEN' });
   });
@@ -147,6 +173,22 @@ describe('AuthService', () => {
     expect(result).not.toHaveProperty('passwordHash');
     expect(result.user).not.toHaveProperty('passwordHash');
     expect(await service.login({ username: 'grower', password })).not.toHaveProperty('passwordHash');
+  });
+
+  it('rejects access tokens without both timestamps or with a non-900-second lifetime', () => {
+    const { service } = createService();
+    const authorizationClaims = { sub: 'user_1', org: 'org_1', platformRole: 'user', membershipRole: 'owner' };
+    const withoutTimestamps = jwt.sign(authorizationClaims, accessTokenSecret, { algorithm: 'HS256', noTimestamp: true });
+    const withoutIssuedAt = jwt.sign(authorizationClaims, accessTokenSecret, {
+      algorithm: 'HS256', noTimestamp: true, expiresIn: 900,
+    });
+    const withoutExpiry = jwt.sign(authorizationClaims, accessTokenSecret, { algorithm: 'HS256' });
+    const shortLived = jwt.sign(authorizationClaims, accessTokenSecret, { algorithm: 'HS256', expiresIn: 60 });
+
+    expect(() => service.verifyAccessToken(withoutTimestamps)).toThrow(expect.objectContaining({ code: 'INVALID_ACCESS_TOKEN' }));
+    expect(() => service.verifyAccessToken(withoutIssuedAt)).toThrow(expect.objectContaining({ code: 'INVALID_ACCESS_TOKEN' }));
+    expect(() => service.verifyAccessToken(withoutExpiry)).toThrow(expect.objectContaining({ code: 'INVALID_ACCESS_TOKEN' }));
+    expect(() => service.verifyAccessToken(shortLived)).toThrow(expect.objectContaining({ code: 'INVALID_ACCESS_TOKEN' }));
   });
 });
 
