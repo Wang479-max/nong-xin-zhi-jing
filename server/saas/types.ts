@@ -56,12 +56,31 @@ export interface Order {
   id: string;
   organizationId: string;
   productId: string;
+  quantity: number;
   idempotencyKey: string;
   amountFen: number;
   currency: string;
   status: 'pending' | 'paid' | 'cancelled' | 'refunded';
   createdAt: string;
   paidAt: string | null;
+}
+
+export type BillingErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'CONTEXT_MISMATCH'
+  | 'PRODUCT_NOT_FOUND'
+  | 'PRODUCT_DISABLED'
+  | 'CATALOG_PRICE_INVALID'
+  | 'IDEMPOTENCY_CONFLICT'
+  | 'ORDER_NOT_FOUND'
+  | 'ORDER_NOT_SETTLEABLE'
+  | 'PAYMENT_MODE_DISABLED';
+
+export class BillingError extends Error {
+  constructor(public readonly code: BillingErrorCode) {
+    super(code);
+    this.name = 'BillingError';
+  }
 }
 
 export interface RefreshSession {
@@ -87,6 +106,7 @@ export type SaasDomainErrorCode =
   | 'USERNAME_TAKEN'
   | 'ORGANIZATION_NOT_FOUND'
   | 'ORDER_NOT_FOUND'
+  | 'ORDER_NOT_SETTLEABLE'
   | 'ORDER_ID_TAKEN'
   | 'IDEMPOTENCY_KEY_TAKEN'
   | 'PRODUCT_NOT_FOUND'

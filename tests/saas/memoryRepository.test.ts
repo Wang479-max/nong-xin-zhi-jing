@@ -162,6 +162,7 @@ function order(id: string, organizationId: string, idempotencyKey: string, produ
     id,
     organizationId,
     productId,
+    quantity: 1,
     idempotencyKey,
     amountFen: 9900,
     currency: 'CNY',

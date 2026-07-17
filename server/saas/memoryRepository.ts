@@ -199,6 +199,11 @@ export class MemorySaasRepository implements SaasRepository {
     return order ? copy(order) : null;
   }
 
+  async findOrderById(orderId: string): Promise<Order | null> {
+    const order = this.ordersById.get(orderId);
+    return order ? copy(order) : null;
+  }
+
   async createOrder(order: Order): Promise<Order> {
     if (this.ordersById.has(order.id)) {
       throw new SaasDomainError('ORDER_ID_TAKEN', 'Order ID is already in use.');
@@ -222,6 +227,9 @@ export class MemorySaasRepository implements SaasRepository {
     const order = this.ordersById.get(orderId);
     if (!order) throw new SaasDomainError('ORDER_NOT_FOUND', 'Order was not found.');
     if (order.status === 'paid') return copy(order);
+    if (order.status !== 'pending') {
+      throw new SaasDomainError('ORDER_NOT_SETTLEABLE', 'Order cannot be settled.');
+    }
 
     const organization = this.organizationsById.get(order.organizationId);
     if (!organization) throw new SaasDomainError('ORGANIZATION_NOT_FOUND', 'Organization was not found.');

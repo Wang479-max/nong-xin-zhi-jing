@@ -154,6 +154,7 @@ function repositoryWith(entitlement: EntitlementSnapshot) {
 function order(organizationId: string): Order {
   return {
     id: 'ai-addon-order', organizationId, productId: 'addon.ai.pro', idempotencyKey: 'ai-addon-payment',
+    quantity: 1,
     amountFen: 9_900, currency: 'CNY', status: 'pending', createdAt: '2030-01-01T00:00:00.000Z', paidAt: null,
   };
 }
