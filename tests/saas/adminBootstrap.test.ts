@@ -43,6 +43,20 @@ describe('secure platform admin bootstrap', () => {
     expect(second.user.platformRole).toBe('platform_admin');
   });
 
+  it('converges concurrent bootstrap attempts on one administrator', async () => {
+    const repository = new MemorySaasRepository();
+
+    const [first, second] = await Promise.all([
+      bootstrapPlatformAdmin(repository, { username: 'race-admin', password: PASSWORD }),
+      bootstrapPlatformAdmin(repository, { username: 'race-admin', password: PASSWORD }),
+    ]);
+
+    expect(first.user.id).toBe(second.user.id);
+    await expect(repository.findUserByUsername('race-admin')).resolves.toMatchObject({
+      user: { platformRole: 'platform_admin' },
+    });
+  });
+
   it('bootstraps only when both explicit environment credentials are present', async () => {
     const usernameOnly = await createSaasRuntimeFromEnv({
       NODE_ENV: 'test', ACCESS_TOKEN_SECRET: SECRET, ADMIN_USERNAME: 'admin', PAYMENT_MODE: 'disabled',

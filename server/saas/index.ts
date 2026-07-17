@@ -5,7 +5,7 @@ import { bootstrapPlatformAdmin } from './admin/bootstrap';
 import { AuthService } from './auth/service';
 import { BillingService, type BillingConfig } from './billing/service';
 import { createAuthConfig } from './config';
-import { createDatabasePool, loadDatabaseConfig } from './db/pool';
+import { createDatabasePool, loadDatabaseConfig, type DatabaseConfig } from './db/pool';
 import { PgSaasRepository } from './db/pgRepository';
 import { EntitlementService } from './entitlements/service';
 import { MemorySaasRepository } from './memoryRepository';
@@ -22,8 +22,27 @@ export interface SaasRuntime {
   close(): Promise<void>;
 }
 
+interface OwnedDatabasePool {
+  query(config: { text: string; query_timeout: number }): Promise<unknown>;
+  end(): Promise<void>;
+}
+
+export interface SaasRuntimeDependencies {
+  createPool?: (config: DatabaseConfig) => OwnedDatabasePool;
+}
+
+const DATABASE_READINESS_TIMEOUT_MS = 5_000;
+
+class DatabaseReadinessError extends Error {
+  constructor() {
+    super('Database readiness check failed.');
+    this.name = 'DatabaseReadinessError';
+  }
+}
+
 export async function createSaasRuntimeFromEnv(
   environment: Record<string, string | undefined> = process.env,
+  dependencies: SaasRuntimeDependencies = {},
 ): Promise<SaasRuntime> {
   const nodeEnvironment = environment.NODE_ENV?.trim().toLowerCase() || 'unspecified';
   const production = nodeEnvironment === 'production';
@@ -49,16 +68,26 @@ export async function createSaasRuntimeFromEnv(
   const paymentMode = resolvePaymentMode(environment.PAYMENT_MODE, nodeEnvironment);
   const secureCookies = production || parseBoolean(environment.SAAS_COOKIE_SECURE, false);
 
-  let pool: Pool | undefined;
+  let pool: OwnedDatabasePool | undefined;
+  let poolClosed = false;
+  const closePool = async (): Promise<void> => {
+    if (!pool || poolClosed) return;
+    poolClosed = true;
+    await pool.end();
+  };
   let repository: SaasRepository;
   if (databaseUrl) {
-    pool = createDatabasePool(loadDatabaseConfig(environment));
-    repository = new PgSaasRepository(pool);
+    const databaseConfig = loadDatabaseConfig(environment);
+    pool = dependencies.createPool?.(databaseConfig)
+      ?? createDatabasePool(databaseConfig) as unknown as OwnedDatabasePool;
+    repository = new PgSaasRepository(pool as unknown as Pool);
   } else {
     repository = new MemorySaasRepository();
   }
 
   try {
+    if (pool) await assertDatabaseReady(pool);
+
     if (environment.ADMIN_USERNAME !== undefined && environment.ADMIN_PASSWORD !== undefined) {
       await bootstrapPlatformAdmin(repository, {
         username: environment.ADMIN_USERNAME,
@@ -84,13 +113,26 @@ export async function createSaasRuntimeFromEnv(
       billingService,
       router,
       paymentMode,
-      close: async () => {
-        if (pool) await pool.end();
-      },
+      close: closePool,
     };
   } catch (error) {
-    if (pool) await pool.end();
+    try {
+      await closePool();
+    } catch {
+      // Preserve the sanitized startup error rather than leaking pool shutdown details.
+    }
     throw error;
+  }
+}
+
+async function assertDatabaseReady(pool: OwnedDatabasePool): Promise<void> {
+  try {
+    await pool.query({
+      text: 'SELECT 1',
+      query_timeout: DATABASE_READINESS_TIMEOUT_MS,
+    });
+  } catch {
+    throw new DatabaseReadinessError();
   }
 }
 

@@ -9,13 +9,9 @@ import cron from 'node-cron';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createSaasRuntimeFromEnv } from './server/saas/index.ts';
 import { createApiRateLimiter } from './server/saas/http/security.ts';
-import { legacyUserApiDisabled } from './server/saas/legacy.ts';
+import { legacyCommerceApiDisabled, legacyUserApiDisabled } from './server/saas/legacy.ts';
 import { getUnifiedCrawledKnowledge, REAL_DEEP_LINKED_FALLBACKS, REAL_TIANXING_FALLBACKS, generateExtendedNewsPool, PRESET_IMGS, crawlMoa, getDetailedContent } from './crawlerService.ts';
-import {
-  PLAN_DEFS, PRODUCTS, VALUE_SERVICES, PAYMENT_PROVIDERS,
-  normalizePlan, getPlanDef, getPlotLimit, getAiMonthlyQuota, planAllowsFeature,
-  type FeatureKey, type PaymentProviderId,
-} from './src/data/pricing.ts';
+import { getPlanDef, getPlotLimit, getAiMonthlyQuota } from './src/data/pricing.ts';
 
 // Handle both ESM and CJS environments
 const getDirname = () => {
@@ -176,8 +172,19 @@ async function startServer() {
     next();
   });
 
+  const trustProxyMode = process.env.TRUST_PROXY?.trim().toLowerCase();
+  if (trustProxyMode !== undefined && trustProxyMode !== '' && trustProxyMode !== 'loopback') {
+    throw new Error('TRUST_PROXY must be loopback when configured.');
+  }
+  if (trustProxyMode === 'loopback') app.set('trust proxy', 'loopback');
   const RATE_MAX = Number(process.env.RATE_LIMIT_PER_MIN || 1200);
-  app.use('/api', createApiRateLimiter({ limit: RATE_MAX, windowMs: 60 * 1_000 }));
+  const RATE_BUCKET_MAX = Number(process.env.RATE_LIMIT_MAX_BUCKETS || 10_000);
+  app.use('/api', createApiRateLimiter({
+    limit: RATE_MAX,
+    windowMs: 60 * 1_000,
+    maxBuckets: RATE_BUCKET_MAX,
+    trustProxy: trustProxyMode === 'loopback',
+  }));
 
   app.use((req, res, next) => {
     if (!req.path.startsWith('/api')) return next();
@@ -252,10 +259,6 @@ async function startServer() {
   };
   let knowledgePool: any[] = [];
   let newsPools: { mara: any[], tianxing: any[], gov: any[] } = { mara: [], tianxing: [], gov: [] };
-  // --- 商业模式（订阅/硬件/增值服务）状态 ---
-  let orders: any[] = [];
-  // commerceDemo=true 时：门控以「演示模式」放行（不卡地块数/不卡 AI 配额），便于现场演示
-  let commerceSettings: { commerceDemo: boolean } = { commerceDemo: false };
 
   // Load data from file with robust retry and fallback mechanism
   const loadDatabase = (retryCount = 3) => {
@@ -287,10 +290,6 @@ async function startServer() {
           }
           if (data.newsPools && typeof data.newsPools === 'object') {
             newsPools = data.newsPools;
-          }
-          if (Array.isArray(data.orders)) orders = data.orders;
-          if (data.commerceSettings && typeof data.commerceSettings === 'object') {
-            commerceSettings = { ...commerceSettings, ...data.commerceSettings };
           }
           console.log(`[DB] Loaded data from ${DB_FILE}`);
           return true;
@@ -495,7 +494,7 @@ async function startServer() {
     saveTimeout = setTimeout(async () => {
       try {
         const dataToSave = JSON.stringify({
-          users, plots, systemLogs, feedbackList, recognitionHistory, customRules, globalConfig, knowledgePool, newsPools, orders, commerceSettings
+          users, plots, systemLogs, feedbackList, recognitionHistory, customRules, globalConfig, knowledgePool, newsPools
         }, null, 2);
         await fs.promises.writeFile(DB_FILE, dataToSave, 'utf-8');
       } catch (err) {
@@ -1453,8 +1452,8 @@ async function startServer() {
   app.post('/api/plots', (req, res) => {
     const { name, area, crop, nextTillageDate, username, plantingDate, expectedHarvestDate } = req.body;
 
-    // 套餐地块数量门控（演示模式下放行）
-    if (!commerceSettings.commerceDemo && username) {
+    // 套餐地块数量门控
+    if (username) {
       const user = users.find(u => u.username === username);
       const plan = user?.role === '管理员' ? '企业版' : (user?.plan || '基础版');
       const limit = getPlotLimit(plan);
@@ -1516,176 +1515,7 @@ async function startServer() {
     res.json(newPlot);
   });
 
-  // ===================================================================
-  // 商业模式接口：① SaaS 订阅 ② 硬件销售 ③ 增值服务（含模拟支付 + 真实支付占位）
-  // ===================================================================
-
-  const PLAN_NAME_BY_ID: Record<string, string> = { free: '基础版', pro: '专业版', enterprise: '企业版' };
-
-  // 计算用户权益快照
-  const computeEntitlements = (username?: string) => {
-    const user = username ? users.find(u => u.username === username) : null;
-    const rawPlan = user?.role === '管理员' ? '企业版' : (user?.plan || '基础版');
-    const def = getPlanDef(rawPlan);
-    if (user) ensureQuotaMonth(user);
-    const plotsOwned = username ? Object.values(plots).filter((p: any) => p.owner === username).length : 0;
-    return {
-      username: username || null,
-      planId: def.id,
-      planName: def.name,
-      planExpiry: user?.planExpiry || null,
-      commerceDemo: commerceSettings.commerceDemo,
-      features: def.features,
-      plotLimit: def.plotLimit,
-      plotsOwned,
-      aiMonthlyQuota: def.aiMonthlyQuota,
-      aiUsedThisMonth: user?.aiRecognitionCount || 0,
-      subscriptions: user?.subscriptions || [],
-      purchasedServices: user?.purchasedServices || [],
-      hasAdvancedAiPack: !!(user?.purchasedServices || []).some((s: any) =>
-        s.unlocks === 'advanced-ai-pack' && (!s.expiry || new Date(s.expiry) > new Date())),
-    };
-  };
-
-  // 真实支付提供商占位：未启用时回退模拟支付
-  const createPaymentIntent = (provider: PaymentProviderId, order: any) => {
-    const cfg = PAYMENT_PROVIDERS.find(p => p.id === provider);
-    // 模拟支付：直接生成交易号并即时结算
-    if (!cfg || provider === 'mock') {
-      return { provider: 'mock' as PaymentProviderId, transactionId: `MOCK_${Date.now()}`, autoSettle: true, payUrl: null, gateway: null };
-    }
-    // 真实支付（微信/支付宝）：占位下单，返回支付链接，等待回调结算。
-    // 实际接入时在此调用 cfg.gateway 真实下单并返回 payUrl / 二维码。
-    return { provider, transactionId: `${provider.toUpperCase()}_${Date.now()}`, autoSettle: false, payUrl: `${cfg.gateway}?out_trade_no=${order.id}&total=${order.amount}`, gateway: cfg.gateway };
-  };
-
-  // 应用订单权益（支付成功后）
-  const applyOrderEntitlement = (order: any) => {
-    const user = users.find(u => u.username === order.username);
-    if (!user) return;
-    if (order.type === 'subscription') {
-      const planId = order.meta?.planId || 'pro';
-      user.plan = PLAN_NAME_BY_ID[planId] || '专业版';
-      const years = order.meta?.years || 1;
-      const base = user.planExpiry && new Date(user.planExpiry) > new Date() ? new Date(user.planExpiry) : new Date();
-      base.setFullYear(base.getFullYear() + years);
-      user.planExpiry = base.toISOString();
-      const plotIds: string[] = order.meta?.plotIds || [];
-      user.subscriptions = user.subscriptions || [];
-      plotIds.forEach(pid => {
-        const exist = user.subscriptions.find((s: any) => s.plotId === pid);
-        if (exist) exist.expiry = user.planExpiry;
-        else user.subscriptions.push({ plotId: pid, planId, expiry: user.planExpiry });
-      });
-    } else if (order.type === 'service') {
-      user.purchasedServices = user.purchasedServices || [];
-      order.items.forEach((it: any) => {
-        const svc = VALUE_SERVICES.find(s => s.id === it.refId);
-        const entry: any = { serviceId: it.refId, name: it.name, orderId: order.id, at: new Date().toISOString() };
-        if (svc?.unlocks) {
-          entry.unlocks = svc.unlocks;
-          if (svc.billing === 'monthly') {
-            const exp = new Date(); exp.setMonth(exp.getMonth() + 1); entry.expiry = exp.toISOString();
-          }
-        }
-        user.purchasedServices.push(entry);
-      });
-    }
-  };
-
-  const settleOrder = (order: any) => {
-    order.status = 'paid';
-    order.paidAt = new Date().toISOString();
-    applyOrderEntitlement(order);
-    addLog('system', `订单 ${order.id} 支付成功（¥${order.amount}）`, 'success');
-    saveData();
-  };
-
-  // 商品 / 套餐 / 服务目录
-  app.get('/api/store/catalog', (_req, res) => {
-    res.json({ plans: PLAN_DEFS, products: PRODUCTS, services: VALUE_SERVICES, paymentProviders: PAYMENT_PROVIDERS });
-  });
-
-  // 当前用户权益快照
-  app.get('/api/commerce/me', (req, res) => {
-    res.json(computeEntitlements(req.query.username as string | undefined));
-  });
-
-  // 我的订单
-  app.get('/api/commerce/orders', (req, res) => {
-    const { username } = req.query;
-    res.json(orders.filter(o => !username || o.username === username).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
-  });
-
-  // 演示模式开关（门控一键切换）
-  app.get('/api/commerce/demo', (_req, res) => res.json({ commerceDemo: commerceSettings.commerceDemo }));
-  app.post('/api/commerce/demo', (req, res) => {
-    commerceSettings.commerceDemo = !!req.body.enabled;
-    saveData();
-    addLog('system', `商业演示模式已${commerceSettings.commerceDemo ? '开启（门控放行）' : '关闭（门控生效）'}`, 'info');
-    res.json({ commerceDemo: commerceSettings.commerceDemo });
-  });
-
-  // 统一下单接口（订阅 / 硬件 / 增值服务）
-  app.post('/api/commerce/orders', (req, res) => {
-    const { username, type, provider = 'mock' } = req.body || {};
-    if (!username) return res.status(400).json({ error: '缺少用户信息' });
-    if (!['subscription', 'hardware', 'service'].includes(type)) return res.status(400).json({ error: '订单类型不合法' });
-
-    let items: any[] = [];
-    let meta: any = {};
-
-    if (type === 'subscription') {
-      const planId = req.body.planId;
-      const def = PLAN_DEFS.find(p => p.id === planId);
-      if (!def || def.id === 'free') return res.status(400).json({ error: '请选择有效的付费套餐' });
-      if (def.id === 'enterprise') return res.status(400).json({ error: '企业版为定制报价，请通过「联系商务」洽谈', code: 'CONTACT_SALES' });
-      const plotIds: string[] = Array.isArray(req.body.plotIds) ? req.body.plotIds : [];
-      const years = Math.max(1, Number(req.body.years) || 1);
-      const qty = Math.max(1, plotIds.length || Number(req.body.qty) || 1);
-      items = [{ refId: def.id, name: `${def.name} × ${qty}地块 × ${years}年`, qty: qty * years, unitPrice: def.pricePerPlotPerYear }];
-      meta = { planId: def.id, plotIds, years };
-    } else {
-      const reqItems = Array.isArray(req.body.items) ? req.body.items : [];
-      const catalog = type === 'hardware' ? PRODUCTS : VALUE_SERVICES;
-      items = reqItems.map((it: any) => {
-        const found: any = catalog.find((c: any) => c.id === it.refId);
-        if (!found) return null;
-        return { refId: found.id, name: found.name, qty: Math.max(1, Number(it.qty) || 1), unitPrice: found.price };
-      }).filter(Boolean);
-      if (items.length === 0) return res.status(400).json({ error: '订单明细为空或商品不存在' });
-    }
-
-    const amount = items.reduce((s, it) => s + it.unitPrice * it.qty, 0);
-    const order: any = {
-      id: `ORD${Date.now()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
-      username, type, items, amount, currency: 'CNY',
-      status: 'pending', provider, createdAt: new Date().toISOString(), meta,
-    };
-
-    const intent = createPaymentIntent(provider, order);
-    order.provider = intent.provider;
-    order.transactionId = intent.transactionId;
-    orders.push(order);
-
-    if (intent.autoSettle) {
-      settleOrder(order); // 模拟支付即时结算
-      return res.json({ order, entitlements: computeEntitlements(username), payment: { settled: true, mock: true } });
-    }
-    // 真实支付占位：返回支付链接，等待 /api/payments/notify 回调结算
-    saveData();
-    res.json({ order, payment: { settled: false, payUrl: intent.payUrl, gateway: intent.gateway, provider: intent.provider } });
-  });
-
-  // 真实支付回调占位（接入真实网关后由其异步通知；此处供演示手动触发结算）
-  app.post('/api/payments/notify', (req, res) => {
-    const { orderId } = req.body || {};
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return res.status(404).json({ error: '订单不存在' });
-    if (order.status === 'paid') return res.json({ ok: true, order });
-    settleOrder(order);
-    res.json({ ok: true, order, entitlements: computeEntitlements(order.username) });
-  });
+  app.use(['/api/commerce', '/api/store', '/api/payments'], legacyCommerceApiDisabled);
 
   // --- 预警规则接口 ---
   app.get('/api/rules', (req, res) => {
@@ -1939,9 +1769,6 @@ async function startServer() {
 
     const user = users.find(u => u.username === username);
     if (!user) return { allowed: true, isSharedQuota: true };
-
-    // 演示模式：放行所有配额，便于现场演示
-    if (commerceSettings.commerceDemo) return { allowed: true, isSharedQuota: true };
 
     const plan = user.role === '管理员' ? '企业版' : (user.plan || '基础版');
     const quota = getAiMonthlyQuota(plan);

@@ -3,7 +3,7 @@ import request from 'supertest';
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { createApiRateLimiter } from '../../server/saas/http/security';
-import { legacyUserApiDisabled } from '../../server/saas/legacy';
+import { legacyCommerceApiDisabled, legacyUserApiDisabled } from '../../server/saas/legacy';
 
 describe('legacy API hardening', () => {
   it.each([
@@ -66,5 +66,93 @@ describe('legacy API hardening', () => {
     expect(source.indexOf("app.use('/api', createApiRateLimiter")).toBeLessThan(
       source.indexOf("app.use('/api/v1', saasRuntime.router)"),
     );
+  });
+
+  it.each([
+    ['get', '/api/store/catalog'],
+    ['get', '/api/commerce/me?username=admin'],
+    ['get', '/api/commerce/orders?username=admin'],
+    ['get', '/api/commerce/demo'],
+    ['post', '/api/commerce/demo'],
+    ['post', '/api/commerce/orders'],
+    ['post', '/api/payments/notify'],
+  ] as const)('retires unauthenticated legacy commerce endpoint %s %s', async (method, path) => {
+    const app = express();
+    app.use(express.json());
+    app.use(['/api/commerce', '/api/store', '/api/payments'], legacyCommerceApiDisabled);
+
+    const response = await request(app)[method](path).send({
+      username: 'admin', provider: 'mock', enabled: true, orderId: 'foreign-order',
+    });
+
+    expect(response.status).toBe(410);
+    expect(response.body).toEqual({
+      success: false,
+      error: {
+        code: 'LEGACY_COMMERCE_API_DISABLED',
+        message: 'Legacy commerce APIs are disabled. Use /api/v1/catalog and /api/v1/orders.',
+      },
+    });
+  });
+
+  it('removes direct legacy commerce declarations and mutation helpers from server source', async () => {
+    const source = await readFile(new URL('../../server.ts', import.meta.url), 'utf8');
+
+    expect(source).toContain("app.use(['/api/commerce', '/api/store', '/api/payments'], legacyCommerceApiDisabled)");
+    expect(source).not.toMatch(/app\.(?:get|post|delete)\('\/api\/(?:commerce|store|payments)/);
+    expect(source).not.toMatch(/createPaymentIntent|applyOrderEntitlement|settleOrder|commerceSettings/);
+    expect(source).not.toMatch(/const\s+\{\s*username,\s*type,\s*provider/);
+  });
+
+  it('does not trust forwarded-for headers unless proxy trust is explicitly enabled', async () => {
+    const app = express();
+    app.use('/api', createApiRateLimiter({ limit: 1, windowMs: 60_000, maxBuckets: 10 }));
+    app.get('/api/v1/test', (_request, response) => response.json({ success: true, data: {} }));
+
+    expect((await request(app).get('/api/v1/test').set('X-Forwarded-For', '198.51.100.1')).status).toBe(200);
+    expect((await request(app).get('/api/v1/test').set('X-Forwarded-For', '198.51.100.2')).status).toBe(429);
+  });
+
+  it('keeps distinct client buckets within the configured hard cap', async () => {
+    const app = express();
+    app.set('trust proxy', 'loopback');
+    const limiter = createApiRateLimiter({
+      limit: 100,
+      windowMs: 60_000,
+      maxBuckets: 2,
+      trustProxy: true,
+    });
+    app.use('/api', limiter);
+    app.get('/api/v1/test', (_request, response) => response.json({ success: true, data: {} }));
+
+    for (let index = 0; index < 25; index += 1) {
+      await request(app).get('/api/v1/test').set('X-Forwarded-For', `198.51.100.${index + 1}`);
+    }
+
+    expect(limiter.bucketCount).toBeLessThanOrEqual(2);
+  });
+
+  it('uses Express-derived client IP only with explicit trusted-proxy configuration', async () => {
+    const app = express();
+    app.set('trust proxy', 'loopback');
+    app.use('/api', createApiRateLimiter({
+      limit: 1,
+      windowMs: 60_000,
+      maxBuckets: 10,
+      trustProxy: true,
+    }));
+    app.get('/api/v1/test', (_request, response) => response.json({ success: true, data: {} }));
+
+    expect((await request(app).get('/api/v1/test').set('X-Forwarded-For', '198.51.100.1')).status).toBe(200);
+    expect((await request(app).get('/api/v1/test').set('X-Forwarded-For', '198.51.100.2')).status).toBe(200);
+    expect((await request(app).get('/api/v1/test').set('X-Forwarded-For', '198.51.100.1')).status).toBe(429);
+  });
+
+  it('configures server proxy trust and bucket bounds explicitly from environment', async () => {
+    const source = await readFile(new URL('../../server.ts', import.meta.url), 'utf8');
+
+    expect(source).toContain("app.set('trust proxy', 'loopback')");
+    expect(source).toContain('RATE_LIMIT_MAX_BUCKETS');
+    expect(source).toMatch(/trustProxy:\s*trustProxyMode\s*===\s*'loopback'/);
   });
 });

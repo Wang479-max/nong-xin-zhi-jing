@@ -42,11 +42,21 @@ export async function bootstrapPlatformAdmin(
       userId = credential.user.id;
     } else {
       const passwordHash = await bcrypt.hash(parsed.data.password, PASSWORD_HASH_ROUNDS);
-      const created = await repository.createUserWithOrganization({
-        username: parsed.data.username,
-        passwordHash,
-      });
-      userId = created.user.id;
+      try {
+        const created = await repository.createUserWithOrganization({
+          username: parsed.data.username,
+          passwordHash,
+        });
+        userId = created.user.id;
+      } catch (error) {
+        if (!hasErrorCode(error, 'USERNAME_TAKEN')) throw error;
+        const concurrentCredential = await repository.findUserByUsername(parsed.data.username);
+        if (!concurrentCredential
+          || !await bcrypt.compare(parsed.data.password, concurrentCredential.passwordHash)) {
+          throw new AdminBootstrapError();
+        }
+        userId = concurrentCredential.user.id;
+      }
     }
 
     await repository.setUserPlatformRole(userId, 'platform_admin');
@@ -57,4 +67,11 @@ export async function bootstrapPlatformAdmin(
     if (error instanceof AdminBootstrapError) throw error;
     throw new AdminBootstrapError();
   }
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && error.code === code;
 }

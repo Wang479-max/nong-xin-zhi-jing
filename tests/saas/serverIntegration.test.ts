@@ -11,7 +11,9 @@ describe('legacy server SaaS integration', () => {
     expect(mount).toBeGreaterThan(-1);
     expect(mount).toBeLessThan(legacyParser);
     expect(source.indexOf("res.setHeader('X-Content-Type-Options'")).toBeLessThan(mount);
-    expect(source.indexOf('const RATE_WINDOW_MS')).toBeLessThan(mount);
+    const limiterMount = source.indexOf("app.use('/api', createApiRateLimiter");
+    expect(limiterMount).toBeGreaterThan(-1);
+    expect(limiterMount).toBeLessThan(mount);
     expect(source).toContain('await saasRuntime.close()');
   });
 
