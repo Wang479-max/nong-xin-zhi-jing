@@ -9,19 +9,19 @@ import {
   Sparkles, 
   Eye, 
   EyeOff, 
-  CheckCircle2,
   Activity,
   Map as MapIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import DataService from '../services/dataService';
+import { SaasApiError, saasClient } from '../services/saasClient';
+import type { SaasSession } from '../types/saas';
 import { useTranslation } from 'react-i18next';
 import loginHero from '../assets/brand/login-hero.jpg';
 import loginBanner from '../assets/brand/login-banner.jpg';
 import appIcon from '../assets/brand/app-icon-512.png';
 
 interface AuthProps {
-  onLogin: (user: any, mode?: 'data' | '3d') => void;
+  onLogin: (session: SaasSession, mode?: 'data' | '3d') => void;
 }
 
 const ParticleLayer1 = () => (
@@ -84,7 +84,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('普通用户');
   const [entryMode, setEntryMode] = useState<'data' | '3d'>('3d');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -93,10 +92,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const getPasswordStrength = (pass: string) => {
     if (!pass) return 0;
     let strength = 0;
-    if (pass.length > 6) strength += 25;
-    if (/[A-Z]/.test(pass)) strength += 25;
-    if (/[0-9]/.test(pass)) strength += 25;
-    if (/[^A-Za-z0-9]/.test(pass)) strength += 25;
+    if (pass.length >= 12) strength += 20;
+    if (/[a-z]/.test(pass)) strength += 20;
+    if (/[A-Z]/.test(pass)) strength += 20;
+    if (/[0-9]/.test(pass)) strength += 20;
+    if (/[^A-Za-z0-9]/.test(pass)) strength += 20;
     return strength;
   };
 
@@ -113,47 +113,26 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         setIsLoading(false);
         return;
       }
-      if (!isLogin && !role) {
-        setError(t('auth.errorEmpty'));
-        setIsLoading(false);
+      if (!isLogin && getPasswordStrength(password) < 100) {
+        setError('密码至少 12 位，并须包含小写字母、大写字母、数字和符号。');
         return;
       }
-
-      let response;
-      if (isLogin) {
-        response = await DataService.login({ username, password });
-      } else {
-        response = await DataService.register({ username, password, role });
-      }
-
-      if (response.ok) {
-        onLogin(response.data.user, entryMode);
-      } else {
-        setError(response.data?.message || t('auth.errorNetwork'));
-      }
+      const session = isLogin
+        ? await saasClient.login({ username, password })
+        : await saasClient.register({ username, password });
+      onLogin(session, entryMode);
     } catch (err) {
-      setError(t('auth.errorNetwork'));
+      setError(err instanceof SaasApiError ? `${err.message}（${err.code}）` : err instanceof Error ? err.message : t('auth.errorNetwork'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDemoLogin = async () => {
-    setError('');
-    setIsLoading(true);
-    try {
-      DataService.setDemoMode(true);
-      const response = await DataService.login({ username: 'admin', password: 'password123' });
-      if (response.ok) {
-        onLogin(response.data.user, entryMode);
-      } else {
-        setError(response.data?.message || t('auth.errorNetwork'));
-      }
-    } catch (err) {
-      setError(t('auth.errorNetwork'));
-    } finally {
-      setIsLoading(false);
-    }
+  const handleAdminPrefill = () => {
+    setUsername('admin');
+    setPassword('');
+    setIsLogin(true);
+    setError('请输入部署时配置的管理员密码。');
   };
 
   const titleChars = ["农", "芯", "智", "境"];
@@ -511,7 +490,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     {/* Password Level Bar */}
                     {!isLogin && password && (
                       <div className="absolute -bottom-3 left-1 right-1 flex gap-1 h-0.5">
-                        {[25, 50, 75, 100].map((level) => (
+                        {[20, 40, 60, 80, 100].map((level) => (
                           <div 
                             key={level} 
                             className={cn(
@@ -526,26 +505,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     )}
                   </div>
 
-                  {/* Options */}
-                  {isLogin && (
-                    <div className="flex items-center justify-between px-1 text-slate-400 font-bold select-none pt-1">
-                      <label className="flex items-center gap-1.5 cursor-pointer group/check">
-                        <div className="relative flex items-center">
-                          <input 
-                            type="checkbox" 
-                            className="peer w-3.5 h-3.5 rounded border-white/15 bg-white/5 text-emerald-500 focus:ring-emerald-500/20 cursor-pointer appearance-none transition-all checked:bg-emerald-500 checked:border-emerald-500"
-                          />
-                          <CheckCircle2 size={9} className="absolute left-[3px] text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
-                        </div>
-                        <span className="text-[10px] group-hover/check:text-slate-200 transition-colors">
-                          {t('auth.rememberMe')}
-                        </span>
-                      </label>
-                      <a href="#" className="text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors">
-                        {t('auth.forgotPassword')}
-                      </a>
-                    </div>
-                  )}
+                  {!isLogin && <p className="px-1 text-[10px] leading-relaxed text-slate-400">密码要求：至少 12 位，包含小写字母、大写字母、数字和符号。</p>}
 
                   {/* Action Button */}
                   <div className="pt-4">
@@ -589,12 +549,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             className="mt-6 w-full max-w-[420px]"
           >
             <button
-              onClick={handleDemoLogin}
+              onClick={handleAdminPrefill}
               disabled={isLoading}
               className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-emerald-500/30 text-slate-400 hover:text-emerald-400 font-bold text-xs tracking-widest transition-all duration-300 group"
             >
               <Sparkles size={14} className="group-hover:text-amber-400 transition-colors" />
-              进入系统离线演示模式
+              填入管理员账号（密码由部署方提供）
             </button>
           </motion.div>
 

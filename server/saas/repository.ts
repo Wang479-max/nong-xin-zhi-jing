@@ -23,6 +23,7 @@ export interface SaasRepository {
   getEntitlementSnapshot(organizationId: string): Promise<EntitlementSnapshot>;
   findOrderByIdempotencyKey(organizationId: string, key: string): Promise<Order | null>;
   findOrderById(orderId: string): Promise<Order | null>;
+  listOrders(organizationId: string): Promise<Order[]>;
   createOrder(order: Order): Promise<Order>;
   settleMockOrder(orderId: string): Promise<Order>;
 }

@@ -369,14 +369,7 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
   }, [recognitionData]);
 
   useEffect(() => {
-    if (propUser) {
-      setUser(propUser);
-    } else {
-      const storedUser = localStorage.getItem('nxzj_user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-      }
-    }
+    setUser(propUser ?? null);
     
     DataService.getPlots(propUser?.username).then(list => {
       setPlots(list);

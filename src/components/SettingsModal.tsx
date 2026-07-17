@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Bell, Palette, Shield, Smartphone, LogOut, CheckCircle2, Loader2, Sparkles, Cpu, Key, Info, Globe, Activity, Zap, Database, RefreshCw, Keyboard, Wallet } from 'lucide-react';
 import { cn } from '../lib/utils';
 import DataService, { getUserApiKeys, setUserApiKeys } from '../services/dataService';
-import { notifyCommerceUpdated } from '../hooks/usePlanGate';
 import { useNotifications } from '../context/NotificationContext';
 import { useTranslation } from 'react-i18next';
 
@@ -21,25 +20,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
   const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab ] = useState<'profile' | 'notifications' | 'appearance' | 'security' | 'ai' | 'system' | 'shortcuts'>('profile');
   const [saved, setSaved] = useState(false);
-
-  // 商业演示模式（门控一键切换）
-  const [commerceDemo, setCommerceDemo] = useState(false);
-  const [demoLoading, setDemoLoading] = useState(false);
-  useEffect(() => {
-    if (isOpen) DataService.getCommerceDemo().then(setCommerceDemo).catch(() => {});
-  }, [isOpen]);
-  const toggleCommerceDemo = async () => {
-    setDemoLoading(true);
-    const next = await DataService.setCommerceDemo(!commerceDemo);
-    setCommerceDemo(next);
-    notifyCommerceUpdated();
-    addNotification({
-      title: '商业演示模式',
-      message: next ? '已开启：套餐门控全部放行，便于现场演示完整功能。' : '已关闭：套餐门控生效（免费版限 2 地块 / AI 5 次/月）。',
-      type: 'info',
-    });
-    setDemoLoading(false);
-  };
 
   // Profile state
   const [username, setUsername] = useState(user?.username || '');
@@ -180,24 +160,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
       localStorage.setItem('nxzj_theme', theme);
       setUserApiKeys(userQwenKey, userZhipuKey);
       
-      // Update user profile
-      const updatedUser = {
-        ...user,
-        username,
-        email,
-        phone,
-        avatar,
-        is2FAEnabled
-      };
-      
-      await DataService.updateUserProfile(updatedUser);
-      onUpdateUser(updatedUser);
-      
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       addNotification({
         title: '保存成功',
-        message: '您的设置已成功保存。',
+        message: '通知、外观与 AI 偏好已保存在本机；账户资料为只读。',
         type: 'success'
       });
     } catch (e) {
@@ -379,7 +346,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                               {avatarPresets.map((p, i) => (
                                 <button 
                                   key={i}
-                                  onClick={() => setAvatar(p)}
+                                  disabled
+                                  title="该功能尚未接入安全账户服务"
                                   className={cn(
                                     "w-10 h-10 rounded-xl border-2 transition-all duration-300 overflow-hidden shadow-sm",
                                     avatar === p ? "border-emerald-500 scale-110 shadow-emerald-500/20" : "border-transparent opacity-50 hover:opacity-100 hover:scale-105"
@@ -399,6 +367,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                             <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">用户名</label>
                             <input 
                               type="text" 
+                              disabled
                               value={username} 
                               onChange={(e) => setUsername(e.target.value)}
                               className="w-full px-5 py-4 bg-white/50 dark:bg-white/5 border border-slate-200/50 dark:border-white/10 rounded-2xl focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 font-black text-slate-900 dark:text-white transition-all duration-300 shadow-sm" 
@@ -415,6 +384,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                           <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">联系邮箱</label>
                           <input 
                             type="email" 
+                            disabled
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             placeholder="输入您的邮箱地址" 
@@ -425,6 +395,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                           <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">手机号码</label>
                           <input 
                             type="tel" 
+                            disabled
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
                             placeholder="输入您的手机号码" 
@@ -700,10 +671,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                             </div>
                           </div>
                           <button 
-                            onClick={() => setShowPasswordModal(true)}
+                            disabled
+                            title="该功能尚未接入安全账户服务"
                             className="px-6 py-2.5 bg-white dark:bg-white/10 hover:bg-emerald-500 hover:text-white text-slate-700 dark:text-slate-200 rounded-2xl font-black text-xs transition-all duration-300 border border-slate-200 dark:border-white/10 shadow-sm active:scale-95"
                           >
-                            修改密码
+                            暂未接入
                           </button>
                         </div>
 
@@ -718,7 +690,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                             </div>
                           </div>
                           <button 
-                            onClick={handleToggle2FA}
+                            disabled
+                            title="该功能尚未接入安全账户服务"
                             className={cn(
                               "px-6 py-2.5 rounded-2xl font-black text-xs transition-all duration-300 shadow-lg active:scale-95",
                               is2FAEnabled 
@@ -726,7 +699,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                                 : "bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/20"
                             )}
                           >
-                            {is2FAEnabled ? '关闭认证' : '去开启'}
+                            暂未接入
                           </button>
                         </div>
                         
@@ -771,28 +744,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                       animate={{ opacity: 1, y: 0 }}
                       className="space-y-8"
                     >
-                      {/* 商业演示模式：门控一键切换 */}
+                      {/* 权益只读说明 */}
                       <div className="flex items-center justify-between gap-4 p-5 rounded-2xl bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/40">
                         <div className="flex items-center gap-4">
                           <div className="w-12 h-12 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center border border-amber-500/20 shrink-0">
                             <Wallet size={24} />
                           </div>
                           <div>
-                            <h3 className="text-lg font-bold text-slate-800 dark:text-white">商业演示模式</h3>
-                            <p className="text-xs text-slate-500 max-w-md">开启后所有套餐门控（地块上限 / AI 配额 / 高级功能）全部放行，便于现场答辩演示完整功能；关闭后按真实商业规则计费门控。</p>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-white">服务器权益模式</h3>
+                            <p className="text-xs text-slate-500 max-w-md">套餐与功能权限由当前组织的服务器权益决定。本地商业演示开关已停用，请前往服务市场查看真实目录与订单。</p>
                           </div>
                         </div>
-                        <button
-                          onClick={toggleCommerceDemo}
-                          disabled={demoLoading}
-                          className={cn(
-                            'relative w-14 h-8 rounded-full transition-colors shrink-0 disabled:opacity-50',
-                            commerceDemo ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600'
-                          )}
-                          aria-pressed={commerceDemo}
-                        >
-                          <span className={cn('absolute top-1 w-6 h-6 bg-white rounded-full transition-all shadow', commerceDemo ? 'left-7' : 'left-1')} />
-                        </button>
+                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">已启用</span>
                       </div>
 
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-6 dark:border-white/5">

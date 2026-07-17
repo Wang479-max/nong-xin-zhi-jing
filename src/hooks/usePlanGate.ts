@@ -1,63 +1,78 @@
-/**
- * @file usePlanGate.ts
- * @description 套餐权益门控 Hook。统一从后端 /api/commerce/me 拉取权益快照，
- * 供各模块判断功能是否解锁（含「演示模式」一键放行）。
- */
-import { useState, useEffect, useCallback } from 'react';
-import DataService from '../services/dataService';
-import { planAllowsFeature, type FeatureKey } from '../data/pricing';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { canAccessFeature } from '../lib/moduleAccess';
+import { saasClient } from '../services/saasClient';
+import type { EntitlementSnapshot, FeatureKey, SaasSession } from '../types/saas';
 
-export interface Entitlements {
-  username: string | null;
-  planId: 'free' | 'pro' | 'enterprise';
-  planName: string;
-  planExpiry?: string | null;
-  commerceDemo: boolean;
-  features: FeatureKey[];
-  plotLimit: number;
-  plotsOwned: number;
-  aiMonthlyQuota: number;
-  aiUsedThisMonth: number;
-  subscriptions: any[];
-  purchasedServices: any[];
-  hasAdvancedAiPack: boolean;
-}
-
-// 模块级缓存 + 订阅，保证多组件共享同一份权益且可被购买/切换演示模式后统一刷新
-let cache: Entitlements | null = null;
+interface CacheEntry { sessionKey: string; entitlement: EntitlementSnapshot }
+let cache: CacheEntry | null = null;
 const subscribers = new Set<() => void>();
 
-export const notifyCommerceUpdated = () => {
+export function invalidateEntitlements(): void {
   cache = null;
-  subscribers.forEach(fn => fn());
-};
+  subscribers.forEach((subscriber) => subscriber());
+}
 
-export function useEntitlements(user: any) {
-  const username = user?.username;
-  const [ent, setEnt] = useState<Entitlements | null>(cache);
-  const [loading, setLoading] = useState(!cache);
+/** Kept as a compatibility alias for components that already broadcast a purchase update. */
+export const notifyCommerceUpdated = invalidateEntitlements;
+
+export function isCurrentEntitlementResponse(
+  requestedSessionKey: string | null,
+  currentSessionKey: string | null,
+  responseOrganizationId: string,
+  currentOrganizationId: string | null,
+): boolean {
+  return requestedSessionKey !== null
+    && requestedSessionKey === currentSessionKey
+    && responseOrganizationId === currentOrganizationId;
+}
+
+export function useEntitlements(session: SaasSession | null) {
+  const organizationId = session?.organization.id ?? null;
+  const sessionKey = session ? `${session.user.id}:${session.organization.id}` : null;
+  const currentSessionKey = useRef(sessionKey);
+  const currentOrganizationId = useRef(organizationId);
+  currentSessionKey.current = sessionKey;
+  currentOrganizationId.current = organizationId;
+  const cached = cache?.sessionKey === sessionKey ? cache.entitlement : null;
+  const [entitlement, setEntitlement] = useState<EntitlementSnapshot | null>(cached);
+  const [loading, setLoading] = useState(Boolean(session) && !cached);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    const data = await DataService.getEntitlements(username);
-    cache = data;
-    setEnt(data);
-    setLoading(false);
-  }, [username]);
+    const requestedSessionKey = sessionKey;
+    if (!requestedSessionKey || !organizationId) {
+      setEntitlement(null); setLoading(false); setError(null); return;
+    }
+    setLoading(true); setError(null);
+    try {
+      const next = await saasClient.entitlements();
+      if (!isCurrentEntitlementResponse(requestedSessionKey, currentSessionKey.current, next.organizationId, currentOrganizationId.current)) return;
+      cache = { sessionKey: requestedSessionKey, entitlement: next };
+      setEntitlement(next);
+    } catch (cause) {
+      if (requestedSessionKey !== currentSessionKey.current) return;
+      setEntitlement(null);
+      setError(cause instanceof Error ? cause.message : '权益加载失败。');
+    } finally {
+      if (requestedSessionKey === currentSessionKey.current) setLoading(false);
+    }
+  }, [organizationId, session, sessionKey]);
 
   useEffect(() => {
-    if (!cache) load();
-    const sub = () => load();
-    subscribers.add(sub);
-    return () => { subscribers.delete(sub); };
-  }, [load]);
+    setEntitlement(cached);
+    setError(null);
+    setLoading(Boolean(sessionKey) && !cached);
+    if (!cached) void load(); else setEntitlement(cached);
+    const subscriber = () => { void load(); };
+    subscribers.add(subscriber);
+    return () => { subscribers.delete(subscriber); };
+  }, [cached, load]);
 
-  const isUnlocked = useCallback((feature: FeatureKey) => {
-    if (ent?.commerceDemo) return true;            // 演示模式：全部放行
-    if (ent) return ent.features.includes(feature);
-    // 权益未就绪时回退到 user.plan 静态判断，避免闪烁锁定
-    return planAllowsFeature(user?.plan, feature);
-  }, [ent, user?.plan]);
+  const isUnlocked = useCallback((feature: FeatureKey | null) => {
+    if (!session) return false;
+    if (entitlement && entitlement.organizationId !== session.organization.id) return false;
+    return canAccessFeature(feature, session.user, entitlement);
+  }, [entitlement, session]);
 
-  return { ent, loading, refresh: load, isUnlocked };
+  return { ent: entitlement, entitlement, loading, error, refresh: load, isUnlocked };
 }

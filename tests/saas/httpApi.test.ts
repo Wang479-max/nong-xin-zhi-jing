@@ -239,6 +239,29 @@ describe('versioned SaaS HTTP API', () => {
     expect(response.body.error.code).toBe('ORDER_NOT_FOUND');
   });
 
+  it('lists only the authenticated membership organization orders newest first', async () => {
+    const { app } = createTestApp();
+    const buyer = await register(app, 'listing-buyer');
+    const outsider = await register(app, 'listing-outsider');
+    const buyerAuth = { Authorization: `Bearer ${buyer.accessToken}` };
+    const outsiderAuth = { Authorization: `Bearer ${outsider.accessToken}` };
+    await request(app).post('/api/v1/orders').set(buyerAuth)
+      .send({ productId: 'addon.ai.pro', quantity: 1, idempotencyKey: 'buyer-first' });
+    const newest = await request(app).post('/api/v1/orders').set(buyerAuth)
+      .send({ productId: 'pro', quantity: 1, idempotencyKey: 'buyer-second' });
+    await request(app).post('/api/v1/orders').set(outsiderAuth)
+      .send({ productId: 'enterprise', quantity: 1, idempotencyKey: 'outsider-only' });
+
+    const listed = await request(app).get('/api/v1/orders').set(buyerAuth);
+
+    expect(listed.status).toBe(200);
+    expect(listed.body.data).toHaveLength(2);
+    expect(listed.body.data[0].id).toBe(newest.body.data.id);
+    expect(listed.body.data.every((order: { organizationId: string }) => order.organizationId === buyer.organization.id)).toBe(true);
+    expect(JSON.stringify(listed.body.data)).not.toContain(outsider.organization.id);
+    expect((await request(app).get('/api/v1/orders')).status).toBe(401);
+  });
+
   it('rejects malformed settlement identifiers before repository access', async () => {
     const { app } = createTestApp();
     const session = await register(app, 'invalid-order-id-user');
@@ -332,7 +355,7 @@ class ExplodingContextRepository extends MemorySaasRepository {
   }
 }
 
-async function register(app: express.Express, username: string): Promise<{ accessToken: string }> {
+async function register(app: express.Express, username: string): Promise<{ accessToken: string; organization: { id: string } }> {
   const response = await request(app).post('/api/v1/auth/register').send({ username, password: PASSWORD });
   expect(response.status).toBe(201);
   return response.body.data;

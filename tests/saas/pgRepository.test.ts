@@ -82,6 +82,20 @@ describe('PgSaasRepository', () => {
     ]));
   });
 
+  it('lists tenant orders from immutable items newest first with a parameterized organization filter', async () => {
+    const db = new ScriptedDb(({ tag }) => tag === 'list-orders' ? [{
+      id: 'order-2', organization_id: 'org-1', idempotency_key: 'key-2', amount_fen: '9900',
+      currency: 'CNY', status: 'pending', created_at: '2030-01-02T00:00:00.000Z', paid_at: null,
+      product_id: 'addon.ai.pro', quantity: '1',
+    }] : []);
+
+    await expect(new PgSaasRepository(db as never).listOrders('org-1')).resolves.toEqual([expect.objectContaining({
+      id: 'order-2', organizationId: 'org-1', productId: 'addon.ai.pro', quantity: 1,
+    })]);
+    expect(db.call('list-orders')?.values).toEqual(['org-1']);
+    expect(db.call('list-orders')?.text).toMatch(/JOIN\s+order_items[\s\S]*organization_id\s*=\s*\$1[\s\S]*ORDER BY[\s\S]*created_at\s+DESC/i);
+  });
+
   it('rolls back an order whose client amount disagrees with the catalog', async () => {
     const db = catalogDb();
     const repository = new PgSaasRepository(db as never);

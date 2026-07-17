@@ -65,6 +65,11 @@ export function createSaasRouter(dependencies: SaasRouterDependencies): express.
     response.json(success(await dependencies.repository.listProducts()));
   }));
 
+  router.get('/orders', requireAccess, asyncRoute(async (request, response) => {
+    const context = requireContext(request);
+    response.json(success(await dependencies.repository.listOrders(context.organization.id)));
+  }));
+
   router.post('/orders', requireAccess, asyncRoute(async (request, response) => {
     const context = requireContext(request);
     const input = request.body as Record<string, unknown> | undefined;

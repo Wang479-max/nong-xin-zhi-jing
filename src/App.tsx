@@ -43,7 +43,8 @@ import {
   Compass,
   HelpCircle,
   Maximize,
-  ShoppingBag
+  ShoppingBag,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -71,6 +72,11 @@ import { useHotkeys } from './hooks/useHotkeys';
 import CommandPanel from './components/CommandPanel';
 import ShortcutHelpPanel from './components/ShortcutHelpPanel';
 import ShortcutFloatingCard from './components/ShortcutFloatingCard';
+import PlanGate from './components/PlanGate';
+import { invalidateEntitlements, useEntitlements } from './hooks/usePlanGate';
+import { canAccessModule, type ModuleId } from './lib/moduleAccess';
+import { SESSION_EXPIRED_EVENT, saasClient } from './services/saasClient';
+import type { SaasSession } from './types/saas';
 
 // --- Components ---
 
@@ -91,9 +97,11 @@ const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: 
     { id: 'monitoring', label: t('app.monitoring'), icon: Activity, keywords: ['监测', '环境', '数据', '传感器', 'monitoring'] },
     { id: 'management', label: t('app.management'), icon: MapIcon, keywords: ['地块', '农田', '管理', 'fields'] },
     { id: 'ai', label: t('app.ai'), icon: Scan, keywords: ['ai', '诊断', '识别', '病虫害'] },
+    { id: 'digitalTwin', label: '3D 数字孪生', icon: Globe, keywords: ['3d', '数字孪生', 'digital twin'] },
     { id: 'knowledge', label: t('app.knowledge'), icon: BookOpen, keywords: ['知识', '智库', '技术', '百科', 'knowledge'] },
     { id: 'news', label: t('app.news'), icon: Newspaper, keywords: ['资讯', '新闻', '政策', '行情', 'news'] },
     { id: 'feedback', label: t('app.feedback'), icon: MessageSquare, keywords: ['反馈', '建议', '问题', 'feedback'] },
+    { id: 'market', label: '服务市场', icon: ShoppingBag, keywords: ['订阅', '套餐', '升级', '订单', 'market'] },
   ];
 
   useEffect(() => {
@@ -550,8 +558,19 @@ function AppContent() {
   const [knowledgeSearchQuery, setKnowledgeSearchQuery] = useState('');
   const [selectedPlotId, setSelectedPlotId] = useState<string | undefined>(undefined);
   const [navKey, setNavKey] = useState(0);
-  const [user, setUser] = useState<any>(null);
+  const [session, setSession] = useState<SaasSession | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<'checking-session' | 'authenticated' | 'signed-out'>('checking-session');
   const [hasAcceptedNotice, setHasAcceptedNotice] = useState(false);
+  const user = session ? {
+    ...session.user,
+    user: session.user,
+    role: session.user.platformRole === 'platform_admin' ? '平台管理员' : session.membership.role,
+    plan: session.entitlement.plan,
+    organization: session.organization,
+    membership: session.membership,
+    entitlement: session.entitlement,
+  } : null;
+  const { entitlement, loading: entitlementLoading } = useEntitlements(session);
 
   // Global overlay control for the Command Center (renders at App root)
   const [isInteractiveOpen, setIsInteractiveOpen] = useState(false);
@@ -772,40 +791,48 @@ function AppContent() {
     };
   }, []);
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem('nxzj_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-        const storedMode = localStorage.getItem('nxzj_app_mode');
-        if (storedMode === '3d' || storedMode === 'data') {
-          setAppMode(storedMode);
-        }
-      } catch (e) {
-        console.warn('Failed to parse stored user:', e);
-        localStorage.removeItem('nxzj_user');
-      }
-    }
-    const noticeAccepted = sessionStorage.getItem('nxzj_notice_accepted');
-    if (noticeAccepted === 'true') {
-      setHasAcceptedNotice(true);
+  const restore = useCallback(async () => {
+    setSessionStatus('checking-session');
+    try {
+      const restored = await saasClient.restoreSession();
+      setSession(restored);
+      setSessionStatus('authenticated');
+      const storedMode = localStorage.getItem('nxzj_app_mode');
+      if (storedMode === '3d' || storedMode === 'data') setAppMode(storedMode);
+    } catch {
+      setSession(null);
+      setSessionStatus('signed-out');
     }
   }, []);
 
-  const handleLogin = (userData: any, mode: 'data' | '3d' = 'data') => {
-    setUser(userData);
+  useEffect(() => {
+    void restore();
+    const noticeAccepted = sessionStorage.getItem('nxzj_notice_accepted');
+    if (noticeAccepted === 'true') setHasAcceptedNotice(true);
+    const expired = () => {
+      invalidateEntitlements();
+      setSession(null); setSessionStatus('signed-out'); setActiveTab('dashboard');
+      sessionStorage.removeItem('nxzj_notice_accepted');
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, expired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expired);
+  }, [restore]);
+
+  const handleLogin = (sessionData: SaasSession, mode: 'data' | '3d' = 'data') => {
+    setSession(sessionData);
+    setSessionStatus('authenticated');
     setAppMode(mode);
-    localStorage.setItem('nxzj_user', JSON.stringify(userData));
     localStorage.setItem('nxzj_app_mode', mode);
     setHasAcceptedNotice(false);
     sessionStorage.removeItem('nxzj_notice_accepted');
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('nxzj_user');
-    sessionStorage.removeItem('nxzj_notice_accepted');
-    setActiveTab('dashboard');
+  const handleLogout = async () => {
+    try { await saasClient.logout(); } finally {
+      invalidateEntitlements();
+      setSession(null); setSessionStatus('signed-out'); setAppMode('data');
+      sessionStorage.removeItem('nxzj_notice_accepted'); setActiveTab('dashboard');
+    }
   };
 
   const handleAcceptNotice = () => {
@@ -925,21 +952,30 @@ function AppContent() {
     return CloudSun;
   };
 
-  if (!user) {
+  if (sessionStatus === 'checking-session') {
+    return <div className="flex min-h-screen items-center justify-center bg-[#020617] text-white"><div className="text-center"><div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-500/15 ring-1 ring-emerald-400/30"><Loader2 className="animate-spin text-emerald-400" size={30} /></div><h1 className="text-xl font-black tracking-widest">农芯智境</h1><p className="mt-2 text-sm text-slate-400">正在安全恢复组织会话…</p></div></div>;
+  }
+
+  if (!session || !user) {
     return <Auth onLogin={handleLogin} />;
   }
 
   const menuItems = [
-    { id: 'dashboard', label: t('app.dashboard'), icon: LayoutDashboard, keywords: ['首页', '概览', '看板', 'dashboard'], roles: ['管理员', '农业专家', '普通用户'] },
-    { id: 'monitoring', label: t('app.monitoring'), icon: Activity, keywords: ['监测', '环境', '数据', '传感器', 'monitoring'], roles: ['管理员', '农业专家'] },
-    { id: 'management', label: t('app.management'), icon: MapIcon, keywords: ['地块', '农田', '管理', 'fields'], roles: ['管理员', '农业专家'] },
-    { id: 'ai', label: t('app.ai'), icon: Scan, keywords: ['ai', '诊断', '识别', '病虫害'], roles: ['管理员', '农业专家', '普通用户'] },
-    { id: 'knowledge', label: t('app.knowledge'), icon: BookOpen, keywords: ['知识', '智库', '技术', '百科', 'knowledge'], roles: ['管理员', '农业专家', '普通用户'] },
-    { id: 'news', label: t('app.news'), icon: Newspaper, keywords: ['资讯', '新闻', '政策', '行情', 'news'], roles: ['管理员', '农业专家', '普通用户'] },
-    { id: 'market', label: '服务市场', icon: ShoppingBag, keywords: ['订阅', '套餐', '商城', '硬件', '增值服务', '升级', '购买', 'market', 'store'], roles: ['管理员', '农业专家', '普通用户'] },
-  ].filter(item => item.roles.includes(user.role));
+    { id: 'dashboard' as ModuleId, label: t('app.dashboard'), icon: LayoutDashboard, keywords: ['首页', '概览', '看板', 'dashboard'] },
+    { id: 'monitoring' as ModuleId, label: t('app.monitoring'), icon: Activity, keywords: ['监测', '环境', '数据', '传感器', 'monitoring'] },
+    { id: 'management' as ModuleId, label: t('app.management'), icon: MapIcon, keywords: ['地块', '农田', '管理', 'fields'] },
+    { id: 'ai' as ModuleId, label: t('app.ai'), icon: Scan, keywords: ['ai', '诊断', '识别', '病虫害'] },
+    { id: 'digitalTwin' as ModuleId, label: '3D 数字孪生', icon: Globe, keywords: ['3d', '数字孪生', 'digital twin'] },
+    { id: 'knowledge' as ModuleId, label: t('app.knowledge'), icon: BookOpen, keywords: ['知识', '智库', '技术', '百科', 'knowledge'] },
+    { id: 'news' as ModuleId, label: t('app.news'), icon: Newspaper, keywords: ['资讯', '新闻', '政策', '行情', 'news'] },
+    { id: 'market' as ModuleId, label: '服务市场', icon: ShoppingBag, keywords: ['订阅', '套餐', '商城', '升级', '购买', 'market'] },
+  ];
 
   function handleNavigate(tab: string, query?: string) {
+    if (tab === 'digitalTwin') {
+      setAppMode('3d');
+      return;
+    }
     setActiveTab(tab);
     if (tab === 'knowledge' && query) {
       setKnowledgeSearchQuery(query);
@@ -960,9 +996,8 @@ function AppContent() {
     }
   }
 
-  const handleUpdateUser = (updatedUser: any) => {
-    setUser(updatedUser);
-    localStorage.setItem('nxzj_user', JSON.stringify(updatedUser));
+  const handleUpdateUser = () => {
+    void saasClient.me().then(setSession).catch(() => undefined);
   };
 
   const handleGlobalSearch = (searchQuery: string) => {
@@ -990,7 +1025,7 @@ function AppContent() {
       case 'dashboard': return <Dashboard onNavigate={handleNavigate} user={user} />;
       case 'monitoring': return <FieldMonitoring user={user} onNavigate={handleNavigate} initialPlotId={selectedPlotId} navKey={navKey} />;
       case 'management': return <FieldManagement user={user} onNavigate={handleNavigate} />;
-      case 'ai': return <AIRecognition onNavigate={handleNavigate} user={user} />;
+      case 'ai': return <PlanGate session={session} feature="ai.diagnosis" onUpgrade={() => handleNavigate('market')}><AIRecognition onNavigate={handleNavigate} user={user} /></PlanGate>;
       case 'knowledge': return (
         <KnowledgeBase 
           initialQuery={knowledgeSearchQuery} 
@@ -1001,7 +1036,7 @@ function AppContent() {
         />
       );
       case 'news': return <NewsModule user={user} initialNewsId={initialNewsId} />;
-      case 'market': return <ServiceMarket user={user} onUpdateUser={handleUpdateUser} onNavigate={handleNavigate} />;
+      case 'market': return <ServiceMarket session={session} onSessionChange={setSession} />;
       case 'feedback': return <Feedback user={user} />;
       default: return <Dashboard onNavigate={handleNavigate} user={user} />;
     }
@@ -1095,15 +1130,17 @@ function AppContent() {
           <nav className="flex-1 py-10 px-5 space-y-2.5 overflow-y-auto custom-scrollbar relative z-10">
             {menuItems.map(item => {
               const Icon = item.icon;
+              const locked = !entitlementLoading && !canAccessModule(item.id, session.user, entitlement);
               return (
                 <NavItem 
                   key={item.id}
                   id={`sidebar-nav-${item.id}`}
                   icon={<Icon size={24} />} 
                   label={item.label} 
-                  active={activeTab === item.id} 
+                  active={item.id !== 'digitalTwin' && activeTab === item.id}
+                  locked={locked}
                   onClick={() => {
-                    setActiveTab(item.id);
+                    if (item.id === 'digitalTwin') setAppMode('3d'); else setActiveTab(item.id);
                     setIsMobileMenuOpen(false);
                   }} 
                   collapsed={isSidebarCollapsed && !isSidebarHovered}
@@ -1422,7 +1459,8 @@ function AppContent() {
               "absolute inset-0 z-0 transition-opacity duration-500",
               appMode === '3d' ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
             )}>
-              <DigitalTwinWrapper 
+              <PlanGate session={session} feature="digital_twin.advanced" onUpgrade={() => { setAppMode('data'); setActiveTab('market'); }}>
+              <DigitalTwinWrapper
                 user={user}
                 activePlotId={selectedPlotId}
                 onSelectPlot={(id) => {
@@ -1430,6 +1468,7 @@ function AppContent() {
                 }}
                 onExit={() => setAppMode('data')}
               />
+              </PlanGate>
             </div>
           )}
 
@@ -1619,7 +1658,8 @@ const NavItem = React.memo(function NavItem({
   onClick, 
   className,
   collapsed,
-  id
+  id,
+  locked
 }: { 
   key?: string | number,
   icon: React.ReactNode, 
@@ -1628,7 +1668,8 @@ const NavItem = React.memo(function NavItem({
   onClick: () => void,
   className?: string,
   collapsed?: boolean,
-  id?: string
+  id?: string,
+  locked?: boolean
 }) {
   const [ripples, setRipples] = useState<{ x: number; y: number; id: number }[]>([]);
 
@@ -1699,6 +1740,7 @@ const NavItem = React.memo(function NavItem({
           {label}
         </motion.span>
       )}
+      {locked && <span className="relative z-10 ml-auto inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[9px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"><Lock size={10} />升级</span>}
 
       {/* Tooltip for collapsed state */}
       {collapsed && (

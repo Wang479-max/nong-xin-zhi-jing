@@ -351,6 +351,20 @@ export class PgSaasRepository implements SaasRepository {
     return result.rows[0] ? mapOrder(result.rows[0]) : null;
   }
 
+  async listOrders(organizationId: string): Promise<Order[]> {
+    const result = await this.database.query<Row>(
+      `/* list-orders */
+       SELECT o.id, o.organization_id, o.idempotency_key, o.amount_fen, o.currency,
+              o.status, o.created_at, o.paid_at, i.product_id, i.quantity
+       FROM orders o
+       JOIN order_items i ON i.order_id = o.id AND i.organization_id = o.organization_id
+       WHERE o.organization_id = $1
+       ORDER BY o.created_at DESC, o.id DESC`,
+      [organizationId],
+    );
+    return result.rows.map(mapOrder);
+  }
+
   async createOrder(order: Order): Promise<Order> {
     try {
       return await this.transaction(async (client) => {

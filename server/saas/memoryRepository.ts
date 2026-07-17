@@ -218,6 +218,12 @@ export class MemorySaasRepository implements SaasRepository {
     return order ? copy(order) : null;
   }
 
+  async listOrders(organizationId: string): Promise<Order[]> {
+    return copy([...this.ordersById.values()]
+      .filter((order) => order.organizationId === organizationId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt)));
+  }
+
   async createOrder(order: Order): Promise<Order> {
     if (this.ordersById.has(order.id)) {
       throw new SaasDomainError('ORDER_ID_TAKEN', 'Order ID is already in use.');

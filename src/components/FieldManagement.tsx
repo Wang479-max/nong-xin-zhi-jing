@@ -222,9 +222,9 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void }
 
   // 检查是否可以添加地块（套餐地块上限，演示模式放行）
   const canAddPlot = () => {
-    if (ent?.commerceDemo) return true;
-    const limit = ent ? ent.plotLimit : getPlotLimit(user?.plan);
-    if (limit === -1) return true;
+    if (user?.platformRole === 'platform_admin') return true;
+    const limit = ent?.limits.plots;
+    if (typeof limit !== 'number') return false;
     return plots.length < limit;
   };
 
