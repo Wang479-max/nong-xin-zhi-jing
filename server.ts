@@ -8,6 +8,8 @@ import os from 'os';
 import cron from 'node-cron';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createSaasRuntimeFromEnv } from './server/saas/index.ts';
+import { createApiRateLimiter } from './server/saas/http/security.ts';
+import { legacyUserApiDisabled } from './server/saas/legacy.ts';
 import { getUnifiedCrawledKnowledge, REAL_DEEP_LINKED_FALLBACKS, REAL_TIANXING_FALLBACKS, generateExtendedNewsPool, PRESET_IMGS, crawlMoa, getDetailedContent } from './crawlerService.ts';
 import {
   PLAN_DEFS, PRODUCTS, VALUE_SERVICES, PAYMENT_PROVIDERS,
@@ -174,33 +176,8 @@ async function startServer() {
     next();
   });
 
-  const RATE_WINDOW_MS = 60 * 1000;
   const RATE_MAX = Number(process.env.RATE_LIMIT_PER_MIN || 1200);
-  const rateBuckets = new Map<string, number[]>();
-  setInterval(() => {
-    const cutoff = Date.now() - RATE_WINDOW_MS;
-    for (const [ip, hits] of rateBuckets) {
-      const kept = hits.filter((time) => time > cutoff);
-      if (kept.length) rateBuckets.set(ip, kept); else rateBuckets.delete(ip);
-    }
-  }, RATE_WINDOW_MS).unref?.();
-
-  app.use('/api', (req, res, next) => {
-    if (req.path === '/health') return next();
-    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-      || req.ip || req.socket.remoteAddress || 'unknown';
-    const now = Date.now();
-    const hits = (rateBuckets.get(ip) || []).filter((time) => time > now - RATE_WINDOW_MS);
-    hits.push(now);
-    rateBuckets.set(ip, hits);
-    res.setHeader('X-RateLimit-Limit', String(RATE_MAX));
-    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, RATE_MAX - hits.length)));
-    if (hits.length > RATE_MAX) {
-      res.setHeader('Retry-After', '60');
-      return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试', code: 'RATE_LIMITED' });
-    }
-    next();
-  });
+  app.use('/api', createApiRateLimiter({ limit: RATE_MAX, windowMs: 60 * 1_000 }));
 
   app.use((req, res, next) => {
     if (!req.path.startsWith('/api')) return next();
@@ -3011,126 +2988,7 @@ async function startServer() {
     });
   });
 
-  // --- 2FA 验证接口 ---
-  app.post('/api/user/security/2fa/enable', (req, res) => {
-    const { username } = req.body;
-    const user = users.find(u => u.username === username);
-    if (user) {
-      (user as any).twoFactorEnabled = true;
-      (user as any).securityLogs.unshift({
-        event: '开启双重身份验证',
-        time: new Date().toISOString(),
-        ip: req.ip || '127.0.0.1'
-      });
-      res.json({ success: true, message: '双重身份验证已开启' });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/security/2fa/disable', (req, res) => {
-    const { username } = req.body;
-    const user = users.find(u => u.username === username);
-    if (user) {
-      (user as any).twoFactorEnabled = false;
-      (user as any).securityLogs.unshift({
-        event: '关闭双重身份验证',
-        time: new Date().toISOString(),
-        ip: req.ip || '127.0.0.1'
-      });
-      res.json({ success: true, message: '双重身份验证已关闭' });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-  app.get('/api/user/profile', (req, res) => {
-    // In a real app, we'd get the user from the token
-    const username = req.query.username as string || 'admin';
-    const user = users.find(u => u.username === username);
-    if (user) {
-      const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/avatar', (req, res) => {
-    const { username, avatar } = req.body;
-    const userIndex = users.findIndex(u => u.username === username);
-    if (userIndex > -1) {
-      users[userIndex].avatar = avatar; saveData();
-      users[userIndex].securityLogs.unshift({ event: '更新头像', time: new Date().toISOString(), ip: '127.0.0.1' });
-      res.json({ success: true, avatarUrl: avatar });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/profile', (req, res) => {
-    const { username, ...profileData } = req.body;
-    const userIndex = users.findIndex(u => u.username === username);
-    if (userIndex > -1) {
-      users[userIndex] = { ...users[userIndex], ...profileData }; saveData();
-      const { password, ...userWithoutPassword } = users[userIndex];
-      res.json(userWithoutPassword);
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/security/password', (req, res) => {
-    const { username, oldPassword, newPassword } = req.body;
-    const userIndex = users.findIndex(u => u.username === username);
-    if (userIndex > -1) {
-      if (users[userIndex].password === oldPassword) {
-        users[userIndex].password = newPassword; saveData();
-        users[userIndex].securityLogs.unshift({ event: '修改密码', time: new Date().toISOString(), ip: '127.0.0.1' });
-        res.json({ success: true });
-      } else {
-        res.status(400).json({ success: false, message: '原密码错误' });
-      }
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  // --- 收藏夹接口 ---
-  app.get('/api/user/favorites', (req, res) => {
-    const username = req.query.username as string || 'admin';
-    const user = users.find(u => u.username === username);
-    if (user) {
-      const favoriteArticles = knowledgePool.filter(a => user.favorites.includes(a.id));
-      res.json(favoriteArticles);
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/favorites', (req, res) => {
-    const { username = 'admin', articleId } = req.body;
-    const user = users.find(u => u.username === username);
-    if (user) {
-      if (!user.favorites.includes(articleId)) {
-        user.favorites.push(articleId); saveData();
-      }
-      res.json({ success: true, favorites: user.favorites });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.delete('/api/user/favorites/:id', (req, res) => {
-    const { id } = req.params;
-    const username = req.query.username as string || 'admin';
-    const user = users.find(u => u.username === username);
-    if (user) {
-      user.favorites = user.favorites.filter(fid => fid !== id); saveData();
-      res.json({ success: true, favorites: user.favorites });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
+  app.use('/api/user', legacyUserApiDisabled);
 
   // --- 用户反馈接口 ---
   app.post('/api/feedback', (req, res) => {
