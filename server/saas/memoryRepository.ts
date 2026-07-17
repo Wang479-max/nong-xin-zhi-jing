@@ -71,7 +71,6 @@ const AI_PRO_ADDON: Product = {
 
 const copy = <T>(value: T): T => structuredClone(value);
 const normalizedUsername = (username: string): string => username.trim().toLowerCase();
-const orderKey = (organizationId: string, key: string): string => `${organizationId}:${key}`;
 
 export class MemorySaasRepository implements SaasRepository {
   private sequence = 0;
@@ -82,7 +81,7 @@ export class MemorySaasRepository implements SaasRepository {
   private readonly entitlementsByOrganizationId = new Map<string, EntitlementSnapshot>();
   private readonly refreshSessionsByTokenHash = new Map<string, RefreshSession>();
   private readonly ordersById = new Map<string, Order>();
-  private readonly orderIdsByIdempotencyKey = new Map<string, string>();
+  private readonly orderIdsByOrganizationAndIdempotencyKey = new Map<string, Map<string, string>>();
   private readonly productsById = new Map<string, Product>([
     [FREE_PRODUCT.id, FREE_PRODUCT],
     [PRO_PRODUCT.id, PRO_PRODUCT],
@@ -167,23 +166,27 @@ export class MemorySaasRepository implements SaasRepository {
   }
 
   async findOrderByIdempotencyKey(organizationId: string, key: string): Promise<Order | null> {
-    const orderId = this.orderIdsByIdempotencyKey.get(orderKey(organizationId, key));
+    const orderId = this.orderIdsByOrganizationAndIdempotencyKey.get(organizationId)?.get(key);
     const order = orderId ? this.ordersById.get(orderId) : undefined;
     return order ? copy(order) : null;
   }
 
   async createOrder(order: Order): Promise<Order> {
-    const key = orderKey(order.organizationId, order.idempotencyKey);
     if (this.ordersById.has(order.id)) {
       throw new SaasDomainError('ORDER_ID_TAKEN', 'Order ID is already in use.');
     }
-    if (this.orderIdsByIdempotencyKey.has(key)) {
+    const orderIdsByIdempotencyKey = this.orderIdsByOrganizationAndIdempotencyKey.get(order.organizationId);
+    if (orderIdsByIdempotencyKey?.has(order.idempotencyKey)) {
       throw new SaasDomainError('IDEMPOTENCY_KEY_TAKEN', 'Order idempotency key is already in use.');
     }
 
     const storedOrder = copy(order);
     this.ordersById.set(storedOrder.id, storedOrder);
-    this.orderIdsByIdempotencyKey.set(key, storedOrder.id);
+    const organizationOrderIds = orderIdsByIdempotencyKey ?? new Map<string, string>();
+    organizationOrderIds.set(storedOrder.idempotencyKey, storedOrder.id);
+    if (!orderIdsByIdempotencyKey) {
+      this.orderIdsByOrganizationAndIdempotencyKey.set(storedOrder.organizationId, organizationOrderIds);
+    }
     return copy(storedOrder);
   }
 
@@ -200,7 +203,9 @@ export class MemorySaasRepository implements SaasRepository {
     if (!entitlement) throw new SaasDomainError('ENTITLEMENT_NOT_FOUND', 'Organization entitlement was not found.');
 
     const paidAt = new Date().toISOString();
-    const updatedEntitlement = this.entitlementForProduct(organization.id, product);
+    const updatedEntitlement = product.id.startsWith('addon.')
+      ? this.entitlementWithAddon(entitlement, product)
+      : this.entitlementForProduct(organization.id, product);
     order.status = 'paid';
     order.paidAt = paidAt;
     this.entitlementsByOrganizationId.set(organization.id, updatedEntitlement);
@@ -215,6 +220,19 @@ export class MemorySaasRepository implements SaasRepository {
       status: 'active',
       features: copy(product.features),
       limits: copy(product.limits),
+    };
+  }
+
+  private entitlementWithAddon(entitlement: EntitlementSnapshot, addon: Product): EntitlementSnapshot {
+    const limits = { ...entitlement.limits };
+    for (const [limit, value] of Object.entries(addon.limits)) {
+      limits[limit] = (limits[limit] ?? 0) + value;
+    }
+
+    return {
+      ...entitlement,
+      features: [...new Set([...entitlement.features, ...addon.features])],
+      limits,
     };
   }
 

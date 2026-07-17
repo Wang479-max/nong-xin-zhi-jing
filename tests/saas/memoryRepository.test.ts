@@ -91,6 +91,34 @@ describe('MemorySaasRepository', () => {
     expect(entitlementAfterFirstSettlement).toMatchObject({ plan: 'pro', features: expect.arrayContaining(['analytics.advanced']) });
   });
 
+  it('preserves and extends the base entitlement when settling an add-on once', async () => {
+    const repo = new MemorySaasRepository();
+    const context = await repo.createUserWithOrganization({ username: 'addon-buyer', passwordHash: 'hash' });
+    await repo.createOrder(order('addon-order', context.organization.id, 'addon-payment'));
+
+    await repo.settleMockOrder('addon-order');
+    const entitlementAfterFirstSettlement = await repo.getEntitlementSnapshot(context.organization.id);
+    await repo.settleMockOrder('addon-order');
+    const entitlementAfterSecondSettlement = await repo.getEntitlementSnapshot(context.organization.id);
+
+    expect(entitlementAfterFirstSettlement).toMatchObject({
+      plan: 'free',
+      features: expect.arrayContaining(['monitoring.basic', 'ai.diagnosis']),
+      limits: { plots: 2, aiMonthly: 505 },
+    });
+    expect(entitlementAfterSecondSettlement).toEqual(entitlementAfterFirstSettlement);
+  });
+
+  it('keeps colon-containing organization and idempotency-key tuples distinct', async () => {
+    const repo = new MemorySaasRepository();
+
+    await repo.createOrder(order('first', 'a:b', 'c'));
+    await repo.createOrder(order('second', 'a', 'b:c'));
+
+    expect(await repo.findOrderByIdempotencyKey('a:b', 'c')).toMatchObject({ id: 'first' });
+    expect(await repo.findOrderByIdempotencyKey('a', 'b:c')).toMatchObject({ id: 'second' });
+  });
+
   it('returns defensive copies of orders', async () => {
     const repo = new MemorySaasRepository();
     const context = await repo.createUserWithOrganization({ username: 'orders', passwordHash: 'hash' });
