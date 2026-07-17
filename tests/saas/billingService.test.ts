@@ -20,6 +20,27 @@ describe('BillingService', () => {
     expect(order).toMatchObject({ productId: 'addon.ai.pro', quantity: 1, amountFen: 9_900, currency: 'CNY', status: 'pending', paidAt: null });
   });
 
+  it('prices and grants each purchased add-on unit', async () => {
+    const { repository, service } = createService();
+    const context = await repository.createUserWithOrganization({ username: 'quantity-addon', passwordHash: 'hash' });
+
+    const order = await service.createOrder(context, { productId: 'addon.ai.pro', quantity: 2, idempotencyKey: 'two-addons' });
+    const settlement = await service.settleMockOrder(context, order.id);
+
+    expect(order).toMatchObject({ quantity: 2, amountFen: 19_800 });
+    expect(settlement.entitlement).toMatchObject({
+      features: expect.arrayContaining(['monitoring.basic', 'ai.diagnosis']), limits: { aiMonthly: 1_005 },
+    });
+  });
+
+  it('rejects multiple units of a base plan', async () => {
+    const { repository, service } = createService();
+    const context = await repository.createUserWithOrganization({ username: 'plan-quantity', passwordHash: 'hash' });
+
+    await expect(service.createOrder(context, { productId: 'pro', quantity: 2, idempotencyKey: 'two-pros' }))
+      .rejects.toMatchObject({ code: 'PLAN_QUANTITY_INVALID' });
+  });
+
   it('returns the original order for the same organization key and semantic request', async () => {
     const { repository, service } = createService();
     const context = await repository.createUserWithOrganization({ username: 'repeat-user', passwordHash: 'hash' });

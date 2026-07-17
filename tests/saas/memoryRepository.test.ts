@@ -33,9 +33,9 @@ describe('MemorySaasRepository', () => {
     products[0].limits.plots = 999;
 
     expect(products.map((product) => product.id)).toEqual(expect.arrayContaining(['free', 'pro', 'enterprise', 'addon.ai.pro']));
-    expect(addon).toMatchObject({ amountFen: 9900, enabled: true });
+    expect(addon).toMatchObject({ amountFen: 9900, enabled: true, kind: 'addon' });
     expect((await repo.listProducts()).find((product) => product.id === 'free')).toMatchObject({
-      features: ['monitoring.basic'],
+      kind: 'plan', features: ['monitoring.basic'],
       limits: { plots: 2 },
     });
   });
@@ -135,6 +135,26 @@ describe('MemorySaasRepository', () => {
       limits: { plots: 2, aiMonthly: 505 },
     });
     expect(entitlementAfterSecondSettlement).toEqual(entitlementAfterFirstSettlement);
+  });
+
+  it('recomputes a replacement plan with every prior paid add-on grant', async () => {
+    const repo = new MemorySaasRepository();
+    const context = await repo.createUserWithOrganization({ username: 'plan-after-addon', passwordHash: 'hash' });
+    await repo.createOrder(order('addon-order', context.organization.id, 'addon-payment'));
+    await repo.createOrder(order('pro-order', context.organization.id, 'pro-payment', 'pro'));
+
+    await repo.settleMockOrder('addon-order');
+    await repo.settleMockOrder('pro-order');
+    const entitlement = await repo.getEntitlementSnapshot(context.organization.id);
+    await repo.settleMockOrder('addon-order');
+    await repo.settleMockOrder('pro-order');
+
+    expect(entitlement).toMatchObject({
+      plan: 'pro',
+      features: expect.arrayContaining(['monitoring.realtime', 'analytics.advanced', 'ai.diagnosis']),
+      limits: { aiMonthly: 600, plots: 20, members: 25 },
+    });
+    expect(await repo.getEntitlementSnapshot(context.organization.id)).toEqual(entitlement);
   });
 
   it('keeps colon-containing organization and idempotency-key tuples distinct', async () => {

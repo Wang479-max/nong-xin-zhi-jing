@@ -14,6 +14,7 @@ import {
 
 const FREE_PRODUCT: Product = {
   id: 'free',
+  kind: 'plan',
   name: 'Free',
   description: 'Essential monitoring for a small organization.',
   amountFen: 0,
@@ -26,6 +27,7 @@ const FREE_PRODUCT: Product = {
 
 const PRO_PRODUCT: Product = {
   id: 'pro',
+  kind: 'plan',
   name: 'Pro',
   description: 'Advanced monitoring, AI, analytics, and team collaboration.',
   amountFen: 9_900,
@@ -38,6 +40,7 @@ const PRO_PRODUCT: Product = {
 
 const ENTERPRISE_PRODUCT: Product = {
   id: 'enterprise',
+  kind: 'plan',
   name: 'Enterprise',
   description: 'Full platform capabilities and private deployment support.',
   amountFen: 99_900,
@@ -59,6 +62,7 @@ const ENTERPRISE_PRODUCT: Product = {
 
 const AI_PRO_ADDON: Product = {
   id: 'addon.ai.pro',
+  kind: 'addon',
   name: 'AI Pro Add-on',
   description: 'Additional AI diagnosis capacity.',
   amountFen: 9_900,
@@ -78,6 +82,7 @@ export class MemorySaasRepository implements SaasRepository {
   private readonly userIdsByUsername = new Map<string, string>();
   private readonly organizationsById = new Map<string, Organization>();
   private readonly membershipsByUserId = new Map<string, Membership>();
+  private readonly baseProductIdsByOrganizationId = new Map<string, string>();
   private readonly entitlementsByOrganizationId = new Map<string, EntitlementSnapshot>();
   private readonly refreshSessionsByTokenHash = new Map<string, RefreshSession>();
   private readonly ordersById = new Map<string, Order>();
@@ -118,6 +123,7 @@ export class MemorySaasRepository implements SaasRepository {
     this.userIdsByUsername.set(username, user.user.id);
     this.organizationsById.set(organization.id, organization);
     this.membershipsByUserId.set(user.user.id, membership);
+    this.baseProductIdsByOrganizationId.set(organization.id, FREE_PRODUCT.id);
     this.entitlementsByOrganizationId.set(organization.id, entitlement);
 
     return copy({ user: user.user, organization, membership, entitlement });
@@ -235,15 +241,15 @@ export class MemorySaasRepository implements SaasRepository {
     if (!organization) throw new SaasDomainError('ORGANIZATION_NOT_FOUND', 'Organization was not found.');
     const product = this.productsById.get(order.productId);
     if (!product) throw new SaasDomainError('PRODUCT_NOT_FOUND', 'Product was not found.');
-    const entitlement = this.entitlementsByOrganizationId.get(organization.id);
-    if (!entitlement) throw new SaasDomainError('ENTITLEMENT_NOT_FOUND', 'Organization entitlement was not found.');
+    if (!this.entitlementsByOrganizationId.has(organization.id)) {
+      throw new SaasDomainError('ENTITLEMENT_NOT_FOUND', 'Organization entitlement was not found.');
+    }
 
     const paidAt = new Date().toISOString();
-    const updatedEntitlement = product.id.startsWith('addon.')
-      ? this.entitlementWithAddon(entitlement, product)
-      : this.entitlementForProduct(organization.id, product);
     order.status = 'paid';
     order.paidAt = paidAt;
+    if (product.kind === 'plan') this.baseProductIdsByOrganizationId.set(organization.id, product.id);
+    const updatedEntitlement = this.recomputeEntitlement(organization.id);
     this.entitlementsByOrganizationId.set(organization.id, updatedEntitlement);
     return copy(order);
   }
@@ -259,10 +265,27 @@ export class MemorySaasRepository implements SaasRepository {
     };
   }
 
-  private entitlementWithAddon(entitlement: EntitlementSnapshot, addon: Product): EntitlementSnapshot {
+  private recomputeEntitlement(organizationId: string): EntitlementSnapshot {
+    const baseProductId = this.baseProductIdsByOrganizationId.get(organizationId);
+    const baseProduct = baseProductId ? this.productsById.get(baseProductId) : undefined;
+    if (!baseProduct || baseProduct.kind !== 'plan') {
+      throw new SaasDomainError('ENTITLEMENT_NOT_FOUND', 'Organization entitlement was not found.');
+    }
+
+    let entitlement = this.entitlementForProduct(organizationId, baseProduct);
+    for (const order of this.ordersById.values()) {
+      if (order.organizationId !== organizationId || order.status !== 'paid') continue;
+      const product = this.productsById.get(order.productId);
+      if (!product) throw new SaasDomainError('PRODUCT_NOT_FOUND', 'Product was not found.');
+      if (product.kind === 'addon') entitlement = this.entitlementWithAddon(entitlement, product, order.quantity);
+    }
+    return entitlement;
+  }
+
+  private entitlementWithAddon(entitlement: EntitlementSnapshot, addon: Product, quantity: number): EntitlementSnapshot {
     const limits = { ...entitlement.limits };
     for (const [limit, value] of Object.entries(addon.limits)) {
-      limits[limit] = (limits[limit] ?? 0) + value;
+      limits[limit] = (limits[limit] ?? 0) + value * quantity;
     }
 
     return {

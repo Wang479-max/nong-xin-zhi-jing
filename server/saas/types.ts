@@ -42,6 +42,7 @@ export interface EntitlementSnapshot {
 
 export interface Product {
   id: string;
+  kind: 'plan' | 'addon';
   name: string;
   description: string;
   amountFen: number;
@@ -71,6 +72,7 @@ export type BillingErrorCode =
   | 'PRODUCT_NOT_FOUND'
   | 'PRODUCT_DISABLED'
   | 'CATALOG_PRICE_INVALID'
+  | 'PLAN_QUANTITY_INVALID'
   | 'IDEMPOTENCY_CONFLICT'
   | 'ORDER_NOT_FOUND'
   | 'ORDER_NOT_SETTLEABLE'

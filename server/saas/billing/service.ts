@@ -35,6 +35,7 @@ export class BillingService {
     const product = (await this.repository.listProducts()).find(({ id }) => id === parsed.data.productId);
     if (!product) throw new BillingError('PRODUCT_NOT_FOUND');
     if (!product.enabled) throw new BillingError('PRODUCT_DISABLED');
+    if (product.kind === 'plan' && parsed.data.quantity !== 1) throw new BillingError('PLAN_QUANTITY_INVALID');
     if (!isValidCatalogPrice(product.amountFen) || product.currency.trim().length === 0) {
       throw new BillingError('CATALOG_PRICE_INVALID');
     }
