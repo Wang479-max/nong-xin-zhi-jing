@@ -15,3 +15,6 @@ sync.lock
 # 打包副本与桌面版（与网站部署无关，避免仓库臃肿）
 源码/
 desktop/
+
+# Isolated Codex feature workspaces
+.worktrees/
