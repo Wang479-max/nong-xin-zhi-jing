@@ -15,23 +15,58 @@ import {
 const FREE_PRODUCT: Product = {
   id: 'free',
   name: 'Free',
-  description: 'Essential farm management for a single organization.',
-  priceCents: 0,
+  description: 'Essential monitoring for a small organization.',
+  amountFen: 0,
   currency: 'CNY',
   billingInterval: 'month',
-  featureKeys: ['farm-management'],
-  limits: { members: 1, farms: 1 },
+  enabled: true,
+  features: ['monitoring.basic'],
+  limits: { aiMonthly: 5, plots: 2, members: 1 },
 };
 
 const PRO_PRODUCT: Product = {
   id: 'pro',
   name: 'Pro',
-  description: 'Collaboration and reporting for growing farm teams.',
-  priceCents: 9_900,
+  description: 'Advanced monitoring, AI, analytics, and team collaboration.',
+  amountFen: 9_900,
   currency: 'CNY',
   billingInterval: 'month',
-  featureKeys: ['farm-management', 'team-management', 'reports'],
-  limits: { members: 25, farms: 20 },
+  enabled: true,
+  features: ['monitoring.basic', 'monitoring.realtime', 'ai.diagnosis', 'analytics.advanced', 'team.members'],
+  limits: { aiMonthly: 100, plots: 20, members: 25 },
+};
+
+const ENTERPRISE_PRODUCT: Product = {
+  id: 'enterprise',
+  name: 'Enterprise',
+  description: 'Full platform capabilities and private deployment support.',
+  amountFen: 99_900,
+  currency: 'CNY',
+  billingInterval: 'month',
+  enabled: true,
+  features: [
+    'monitoring.basic',
+    'monitoring.realtime',
+    'ai.diagnosis',
+    'digital_twin.advanced',
+    'analytics.advanced',
+    'device.control',
+    'team.members',
+    'deployment.private',
+  ],
+  limits: { aiMonthly: 1_000, plots: 1_000, members: 500 },
+};
+
+const AI_PRO_ADDON: Product = {
+  id: 'addon.ai.pro',
+  name: 'AI Pro Add-on',
+  description: 'Additional AI diagnosis capacity.',
+  amountFen: 9_900,
+  currency: 'CNY',
+  billingInterval: null,
+  enabled: true,
+  features: ['ai.diagnosis'],
+  limits: { aiMonthly: 500 },
 };
 
 const copy = <T>(value: T): T => structuredClone(value);
@@ -48,7 +83,12 @@ export class MemorySaasRepository implements SaasRepository {
   private readonly refreshSessionsByTokenHash = new Map<string, RefreshSession>();
   private readonly ordersById = new Map<string, Order>();
   private readonly orderIdsByIdempotencyKey = new Map<string, string>();
-  private readonly products = [FREE_PRODUCT, PRO_PRODUCT];
+  private readonly productsById = new Map<string, Product>([
+    [FREE_PRODUCT.id, FREE_PRODUCT],
+    [PRO_PRODUCT.id, PRO_PRODUCT],
+    [ENTERPRISE_PRODUCT.id, ENTERPRISE_PRODUCT],
+    [AI_PRO_ADDON.id, AI_PRO_ADDON],
+  ]);
 
   async createUserWithOrganization(input: { username: string; passwordHash: string }): Promise<UserContext> {
     const username = normalizedUsername(input.username);
@@ -58,7 +98,7 @@ export class MemorySaasRepository implements SaasRepository {
 
     const createdAt = new Date().toISOString();
     const user: UserWithCredential = {
-      user: { id: this.nextId('user'), username, createdAt },
+      user: { id: this.nextId('user'), username, platformRole: 'user', createdAt },
       passwordHash: input.passwordHash,
     };
     const organization: Organization = {
@@ -73,14 +113,7 @@ export class MemorySaasRepository implements SaasRepository {
       role: 'owner',
       createdAt,
     };
-    const entitlement: EntitlementSnapshot = {
-      organizationId: organization.id,
-      productId: FREE_PRODUCT.id,
-      plan: FREE_PRODUCT.name,
-      status: 'active',
-      featureKeys: [...FREE_PRODUCT.featureKeys],
-      limits: { ...FREE_PRODUCT.limits },
-    };
+    const entitlement = this.entitlementForProduct(organization.id, FREE_PRODUCT);
 
     this.usersById.set(user.user.id, user);
     this.userIdsByUsername.set(username, user.user.id);
@@ -124,21 +157,13 @@ export class MemorySaasRepository implements SaasRepository {
   }
 
   async listProducts(): Promise<Product[]> {
-    return copy(this.products);
+    return copy([...this.productsById.values()]);
   }
 
   async getEntitlementSnapshot(organizationId: string): Promise<EntitlementSnapshot> {
     const entitlement = this.entitlementsByOrganizationId.get(organizationId);
-    if (entitlement) return copy(entitlement);
-
-    return copy({
-      organizationId,
-      productId: FREE_PRODUCT.id,
-      plan: FREE_PRODUCT.name,
-      status: 'active',
-      featureKeys: FREE_PRODUCT.featureKeys,
-      limits: FREE_PRODUCT.limits,
-    });
+    if (!entitlement) throw new SaasDomainError('ORGANIZATION_NOT_FOUND', 'Organization was not found.');
+    return copy(entitlement);
   }
 
   async findOrderByIdempotencyKey(organizationId: string, key: string): Promise<Order | null> {
@@ -149,6 +174,9 @@ export class MemorySaasRepository implements SaasRepository {
 
   async createOrder(order: Order): Promise<Order> {
     const key = orderKey(order.organizationId, order.idempotencyKey);
+    if (this.ordersById.has(order.id)) {
+      throw new SaasDomainError('ORDER_ID_TAKEN', 'Order ID is already in use.');
+    }
     if (this.orderIdsByIdempotencyKey.has(key)) {
       throw new SaasDomainError('IDEMPOTENCY_KEY_TAKEN', 'Order idempotency key is already in use.');
     }
@@ -162,10 +190,32 @@ export class MemorySaasRepository implements SaasRepository {
   async settleMockOrder(orderId: string): Promise<Order> {
     const order = this.ordersById.get(orderId);
     if (!order) throw new SaasDomainError('ORDER_NOT_FOUND', 'Order was not found.');
+    if (order.status === 'paid') return copy(order);
 
-    order.status = 'settled';
-    order.settledAt ??= new Date().toISOString();
+    const organization = this.organizationsById.get(order.organizationId);
+    if (!organization) throw new SaasDomainError('ORGANIZATION_NOT_FOUND', 'Organization was not found.');
+    const product = this.productsById.get(order.productId);
+    if (!product) throw new SaasDomainError('PRODUCT_NOT_FOUND', 'Product was not found.');
+    const entitlement = this.entitlementsByOrganizationId.get(organization.id);
+    if (!entitlement) throw new SaasDomainError('ENTITLEMENT_NOT_FOUND', 'Organization entitlement was not found.');
+
+    const paidAt = new Date().toISOString();
+    const updatedEntitlement = this.entitlementForProduct(organization.id, product);
+    order.status = 'paid';
+    order.paidAt = paidAt;
+    this.entitlementsByOrganizationId.set(organization.id, updatedEntitlement);
     return copy(order);
+  }
+
+  private entitlementForProduct(organizationId: string, product: Product): EntitlementSnapshot {
+    return {
+      organizationId,
+      productId: product.id,
+      plan: product.id,
+      status: 'active',
+      features: copy(product.features),
+      limits: copy(product.limits),
+    };
   }
 
   private nextId(prefix: string): string {
