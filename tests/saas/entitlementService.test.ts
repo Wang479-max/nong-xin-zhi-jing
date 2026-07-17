@@ -82,11 +82,37 @@ describe('EntitlementService', () => {
     });
   });
 
+  it('fails closed when a user context is paired with another organization entitlement', async () => {
+    const repository = new MemorySaasRepository();
+    const contextA = await repository.createUserWithOrganization({ username: 'organization-a-user', passwordHash: 'hash' });
+    const contextB = await repository.createUserWithOrganization({ username: 'organization-b-user', passwordHash: 'hash' });
+    await repository.createOrder(order(contextB.organization.id));
+    await repository.settleMockOrder('ai-addon-order');
+    const service = new EntitlementService(repository);
+    const crossTenantContext = { ...contextA, organization: contextB.organization };
+
+    await expect(service.canUse(crossTenantContext, 'ai.diagnosis'))
+      .rejects.toMatchObject({ code: 'CONTEXT_MISMATCH' });
+  });
+
+  it('fails closed when membership and user bindings do not match', async () => {
+    const context = contextWith({});
+    const service = new EntitlementService(repositoryWith(context.entitlement));
+    const mismatchedContext = { ...context, membership: { ...context.membership, userId: 'another-user' } };
+
+    await expect(service.canUse(mismatchedContext, 'monitoring.basic'))
+      .rejects.toMatchObject({ code: 'CONTEXT_MISMATCH' });
+  });
+
   it('propagates unknown organization failures without authorizing access', async () => {
     const repository = new MemorySaasRepository();
     const context = await repository.createUserWithOrganization({ username: 'unknown-org-user', passwordHash: 'hash' });
     const service = new EntitlementService(repository);
-    const unknownContext = { ...context, organization: { ...context.organization, id: 'missing-org' } };
+    const unknownContext = {
+      ...context,
+      organization: { ...context.organization, id: 'missing-org' },
+      membership: { ...context.membership, organizationId: 'missing-org' },
+    };
 
     await expect(service.canUse(unknownContext, 'monitoring.basic')).rejects.toMatchObject({ code: 'ORGANIZATION_NOT_FOUND' });
   });

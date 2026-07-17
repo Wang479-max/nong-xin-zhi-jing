@@ -5,6 +5,15 @@ export type EntitlementDecision =
   | { allowed: true; source: 'admin' | 'entitlement' }
   | { allowed: false; code: 'FEATURE_REQUIRED'; feature: FeatureKey; upgradePath: '/market' };
 
+export class EntitlementContextError extends Error {
+  readonly code = 'CONTEXT_MISMATCH';
+
+  constructor() {
+    super('User context membership does not match its user and organization.');
+    this.name = 'EntitlementContextError';
+  }
+}
+
 export class EntitlementService {
   constructor(private readonly repository: SaasRepository) {}
 
@@ -18,7 +27,12 @@ export class EntitlementService {
       return { allowed: true, source: 'admin' };
     }
 
-    const entitlement = await this.forOrganization(context.organization.id);
+    if (context.membership.userId !== context.user.id
+      || context.organization.id !== context.membership.organizationId) {
+      throw new EntitlementContextError();
+    }
+
+    const entitlement = await this.forOrganization(context.membership.organizationId);
     if (entitlement.status === 'active' && entitlement.features.includes(feature)) {
       return { allowed: true, source: 'entitlement' };
     }
