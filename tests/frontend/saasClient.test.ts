@@ -162,4 +162,60 @@ describe('SaaS browser client', () => {
     expect(wasAborted).toBe(true);
     expect(client.hasAccessToken()).toBe(false);
   });
+
+  it('rejects a delayed me response after logout without restoring the cleared session', async () => {
+    let announceMe!: () => void;
+    const meStarted = new Promise<void>((resolve) => { announceMe = resolve; });
+    let resolveMe!: (response: Response) => void;
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/auth/login')) return json(sessionPayload());
+      if (url.endsWith('/me')) return new Promise<Response>((resolve) => {
+        resolveMe = resolve;
+        announceMe();
+      });
+      if (url.endsWith('/auth/logout')) return json({ success: true, data: { loggedOut: true } });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const client = createSaasClient(fetcher, 'https://farm.example');
+    await client.login({ username: 'farmer', password: 'x' });
+
+    const delayedMe = client.me();
+    await meStarted;
+    await client.logout();
+    resolveMe(json(sessionPayload('late-me-token')));
+
+    await expect(delayedMe).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+    expect(client.currentSession()).toBeNull();
+    expect(client.hasAccessToken()).toBe(false);
+  });
+
+  it('cannot let an old me response overwrite a newly logged-in account', async () => {
+    let announceMe!: () => void;
+    const meStarted = new Promise<void>((resolve) => { announceMe = resolve; });
+    let resolveMe!: (response: Response) => void;
+    let loginCount = 0;
+    const secondAccount = sessionPayload('second-token');
+    secondAccount.data.user = { ...secondAccount.data.user, id: 'user-2', username: 'grower' };
+    secondAccount.data.membership = { ...secondAccount.data.membership, id: 'member-2', userId: 'user-2' };
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/auth/login')) return json(loginCount++ === 0 ? sessionPayload() : secondAccount);
+      if (url.endsWith('/me')) return new Promise<Response>((resolve) => {
+        resolveMe = resolve;
+        announceMe();
+      });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const client = createSaasClient(fetcher, 'https://farm.example');
+    await client.login({ username: 'farmer', password: 'x' });
+
+    const delayedMe = client.me();
+    await meStarted;
+    await client.login({ username: 'grower', password: 'x' });
+    resolveMe(json(sessionPayload('old-me-token')));
+
+    await expect(delayedMe).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+    expect(client.currentSession()?.user.username).toBe('grower');
+  });
 });

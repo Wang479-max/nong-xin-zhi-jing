@@ -74,7 +74,7 @@ import ShortcutHelpPanel from './components/ShortcutHelpPanel';
 import ShortcutFloatingCard from './components/ShortcutFloatingCard';
 import PlanGate from './components/PlanGate';
 import { invalidateEntitlements, useEntitlements } from './hooks/usePlanGate';
-import { canAccessModule, type ModuleId } from './lib/moduleAccess';
+import { canAccessAction, canAccessModule, type ModuleId } from './lib/moduleAccess';
 import { SESSION_EXPIRED_EVENT, saasClient } from './services/saasClient';
 import type { SaasSession } from './types/saas';
 
@@ -456,7 +456,7 @@ const BrandArea = React.memo(() => (
 
 import { NotificationProvider, useNotifications } from './context/NotificationContext';
 
-const DigitalTwinWrapper = ({ user, activePlotId, onSelectPlot, onExit }: { user: any, activePlotId?: string, onSelectPlot: (id: string) => void, onExit: () => void }) => {
+const DigitalTwinWrapper = ({ user, activePlotId, onSelectPlot, onExit, readOnly, onUpgrade }: { user: any, activePlotId?: string, onSelectPlot: (id: string) => void, onExit: () => void, readOnly: boolean, onUpgrade: () => void }) => {
   const { addNotification } = useNotifications();
   const [plots, setPlots] = useState<any[]>([]);
   const [hardwareStatus, setHardwareStatus] = useState<Record<string, boolean>>({ irrigation: false, ventilation: true, heating: false, lighting: false });
@@ -476,6 +476,15 @@ const DigitalTwinWrapper = ({ user, activePlotId, onSelectPlot, onExit }: { user
     }
   }, [user, activePlotId]);
 
+  const requireAdvancedTwin = () => {
+    addNotification({
+      title: '需要升级',
+      message: '基础预览支持浏览和切换地块；设备控制与精准施肥需要升级高级数字孪生。',
+      type: 'warning',
+    });
+    onUpgrade();
+  };
+
   return (
     <DigitalTwin 
       plots={plots} 
@@ -484,6 +493,7 @@ const DigitalTwinWrapper = ({ user, activePlotId, onSelectPlot, onExit }: { user
       hardwareStatus={hardwareStatus}
       realtimeData={realtimeData}
       onControlHardware={(type: any, action?: 'on' | 'off', zone?: string) => {
+        if (readOnly) { requireAdvancedTwin(); return; }
         const key = zone ? `${type}_${zone}` : type;
         const currentState = hardwareStatus[key];
         const newState = action ? action === 'on' : !currentState;
@@ -501,6 +511,7 @@ const DigitalTwinWrapper = ({ user, activePlotId, onSelectPlot, onExit }: { user
         DataService.addDashboardLog(`[ACTUATOR_CMD] 收到 3D 农场宏观操控指令：${newState ? '开启' : '关闭'} ${deviceName}`);
       }}
       onFertilize={() => {
+        if (readOnly) { requireAdvancedTwin(); return; }
         addNotification({
           title: '智能决策下发成功',
           message: '已根据当前土壤NPK状态和作物生长阶段，生成精准水肥配方，并下发至水肥一体机。',
@@ -508,6 +519,8 @@ const DigitalTwinWrapper = ({ user, activePlotId, onSelectPlot, onExit }: { user
         });
       }}
       onExit={onExit}
+      readOnly={readOnly}
+      onUpgrade={requireAdvancedTwin}
     />
   );
 };
@@ -960,6 +973,8 @@ function AppContent() {
     return <Auth onLogin={handleLogin} />;
   }
 
+  const digitalTwinReadOnly = !canAccessAction('digitalTwin.control', session.user, session.entitlement);
+
   const menuItems = [
     { id: 'dashboard' as ModuleId, label: t('app.dashboard'), icon: LayoutDashboard, keywords: ['首页', '概览', '看板', 'dashboard'] },
     { id: 'monitoring' as ModuleId, label: t('app.monitoring'), icon: Activity, keywords: ['监测', '环境', '数据', '传感器', 'monitoring'] },
@@ -1024,7 +1039,7 @@ function AppContent() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard onNavigate={handleNavigate} user={user} />;
       case 'monitoring': return <FieldMonitoring user={user} onNavigate={handleNavigate} initialPlotId={selectedPlotId} navKey={navKey} />;
-      case 'management': return <FieldManagement user={user} onNavigate={handleNavigate} />;
+      case 'management': return <FieldManagement user={user} onNavigate={handleNavigate} digitalTwinReadOnly={digitalTwinReadOnly} onUpgradeDigitalTwin={() => handleNavigate('market')} />;
       case 'ai': return <PlanGate session={session} feature="ai.diagnosis" onUpgrade={() => handleNavigate('market')}><AIRecognition onNavigate={handleNavigate} user={user} /></PlanGate>;
       case 'knowledge': return (
         <KnowledgeBase 
@@ -1459,7 +1474,6 @@ function AppContent() {
               "absolute inset-0 z-0 transition-opacity duration-500",
               appMode === '3d' ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
             )}>
-              <PlanGate session={session} feature="digital_twin.advanced" onUpgrade={() => { setAppMode('data'); setActiveTab('market'); }}>
               <DigitalTwinWrapper
                 user={user}
                 activePlotId={selectedPlotId}
@@ -1467,8 +1481,9 @@ function AppContent() {
                   setSelectedPlotId(id);
                 }}
                 onExit={() => setAppMode('data')}
+                readOnly={!canAccessAction('digitalTwin.control', session.user, session.entitlement)}
+                onUpgrade={() => { setAppMode('data'); setActiveTab('market'); }}
               />
-              </PlanGate>
             </div>
           )}
 

@@ -50,6 +50,7 @@ import { cn } from '../lib/utils';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DataService, { AICropAnalysis, getUserApiKeys, getPublicAIUsage } from '../services/dataService';
+import { saasClient } from '../services/saasClient';
 
 interface RecognitionResult {
   type: string;
@@ -279,18 +280,11 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
     
     try {
       const { zhipuKey } = getUserApiKeys();
-      const storedUserString = localStorage.getItem('currentUser') || localStorage.getItem('user');
-      let username = '';
-      try {
-        if (storedUserString) {
-          const userObj = JSON.parse(storedUserString);
-          username = userObj.username || userObj.name || '';
-        }
-      } catch (e) {}
+      const username = typeof propUser?.username === 'string' ? propUser.username : '';
 
       const history = consultMsg.map(m => ({ role: m.role, content: m.text }));
       
-      const response = await fetch('/api/ai/chat', {
+      const response = await saasClient.fetchWithSession('/api/ai/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

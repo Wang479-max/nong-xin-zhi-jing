@@ -41,6 +41,9 @@ const ServiceMarket: React.FC<Props> = ({ session, onSessionChange }) => {
         const settled = await saasClient.settleOrder(order.id);
         invalidateEntitlements();
         const updated = await saasClient.me();
+        if (updated.user.id !== session.user.id || updated.organization.id !== session.organization.id) {
+          throw new SaasApiError('SESSION_CHANGED', '会话状态已改变。', 0);
+        }
         onSessionChange({ ...updated, entitlement: settled.entitlement });
         setOrders((current) => current.map((item) => item.id === settled.order.id ? settled.order : item));
         setNotice('订单已结算，组织权益已更新。');

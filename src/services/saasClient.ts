@@ -121,6 +121,13 @@ export function createSaasClient(
 
   const api = async <T>(path: string, init?: RequestInit): Promise<T> => readEnvelope(await withSession(`${API_ROOT}${path}`, init)) as Promise<T>;
 
+  const beginAuthSession = (path: '/auth/login' | '/auth/register', input: { username: string; password: string }) => {
+    authGeneration += 1;
+    refreshController?.abort();
+    clearSession();
+    return authSession(path, input, undefined, authGeneration);
+  };
+
   return {
     hasAccessToken: () => accessToken !== null,
     currentSession: () => currentSession,
@@ -129,21 +136,24 @@ export function createSaasClient(
       refreshController?.abort();
       clearSession();
     },
-    login: (input: { username: string; password: string }) => authSession('/auth/login', input, undefined, authGeneration),
-    register: (input: { username: string; password: string }) => authSession('/auth/register', input, undefined, authGeneration),
+    login: (input: { username: string; password: string }) => beginAuthSession('/auth/login', input),
+    register: (input: { username: string; password: string }) => beginAuthSession('/auth/register', input),
     restoreSession: () => refresh(false),
     logout: async () => {
       authGeneration += 1;
+      const generation = authGeneration;
       const pendingRefresh = refreshFlight;
       refreshController?.abort();
       clearSession();
       if (pendingRefresh) await pendingRefresh.catch(() => undefined);
       try {
         await readEnvelope(await fetcher(`${API_ROOT}/auth/logout`, { method: 'POST', credentials: 'include' }));
-      } finally { clearSession(); }
+      } finally { if (generation === authGeneration) clearSession(); }
     },
     me: async () => {
+      const generation = authGeneration;
       const session = parseContext(await api<unknown>('/me'));
+      if (generation !== authGeneration) throw new SaasApiError('SESSION_CHANGED', '会话状态已改变。', 0);
       currentSession = session;
       return session;
     },
