@@ -1,0 +1,42 @@
+[Unit]
+Description=农芯智境 SaaS
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=nongxinzhijing
+Group=nongxinzhijing
+WorkingDirectory=/opt/nongxinzhijing/current
+EnvironmentFile=/opt/nongxinzhijing/shared/.env
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=TRUST_PROXY=loopback
+Environment=USER_DATA_PATH=/var/lib/nxzj
+ExecStartPre=/usr/bin/node /opt/nongxinzhijing/current/dist/migrate.mjs
+ExecStart=/usr/bin/node /opt/nongxinzhijing/current/dist/server.cjs
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=120s
+TimeoutStopSec=15s
+KillSignal=SIGTERM
+UMask=0027
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+StateDirectory=nxzj
+StateDirectoryMode=0750
+ReadWritePaths=/var/lib/nxzj
+
+[Install]
+WantedBy=multi-user.target

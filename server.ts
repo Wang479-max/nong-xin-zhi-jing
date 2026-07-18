@@ -10,6 +10,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createSaasRuntimeFromEnv } from './server/saas/index.ts';
 import { createApiRateLimiter } from './server/saas/http/security.ts';
 import { legacyCommerceApiDisabled, legacyUserApiDisabled } from './server/saas/legacy.ts';
+import { resolveListenHost } from './server/listenHost.ts';
+import { resolveTrustProxy } from './server/trustProxy.ts';
 import { getUnifiedCrawledKnowledge, REAL_DEEP_LINKED_FALLBACKS, REAL_TIANXING_FALLBACKS, generateExtendedNewsPool, PRESET_IMGS, crawlMoa, getDetailedContent } from './crawlerService.ts';
 import { getPlanDef, getPlotLimit, getAiMonthlyQuota } from './src/data/pricing.ts';
 
@@ -155,8 +157,9 @@ function generateMockAIResult(type: string, plot: any) {
 export const app = express();
 
 async function startServer() {
-  // 优先使用环境变量指定的端口，未设置时默认 3000；若端口被占用则自动改用空闲端口。
+  // 优先使用环境变量指定的端口；仅开发环境在端口占用时自动改用空闲端口。
   const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+  const HOST = resolveListenHost(process.env);
 
   // Shared API protections must run before the versioned router can terminate a request.
   app.use((req, res, next) => {
@@ -172,18 +175,15 @@ async function startServer() {
     next();
   });
 
-  const trustProxyMode = process.env.TRUST_PROXY?.trim().toLowerCase();
-  if (trustProxyMode !== undefined && trustProxyMode !== '' && trustProxyMode !== 'loopback') {
-    throw new Error('TRUST_PROXY must be loopback when configured.');
-  }
-  if (trustProxyMode === 'loopback') app.set('trust proxy', 'loopback');
+  const trustProxyMode = resolveTrustProxy(process.env);
+  if (trustProxyMode !== false) app.set('trust proxy', trustProxyMode);
   const RATE_MAX = Number(process.env.RATE_LIMIT_PER_MIN || 1200);
   const RATE_BUCKET_MAX = Number(process.env.RATE_LIMIT_MAX_BUCKETS || 10_000);
   app.use('/api', createApiRateLimiter({
     limit: RATE_MAX,
     windowMs: 60 * 1_000,
     maxBuckets: RATE_BUCKET_MAX,
-    trustProxy: trustProxyMode === 'loopback',
+    trustProxy: trustProxyMode !== false,
   }));
 
   app.use((req, res, next) => {
@@ -2976,13 +2976,20 @@ async function startServer() {
   };
 
   // Always listen in development and production to ensure the service is bound
-  const server = app.listen(PORT as number, '0.0.0.0', () => attachServerHandlers(server));
+  const server = app.listen(PORT as number, HOST, () => attachServerHandlers(server));
 
-  // 端口被占用时，自动改用系统分配的空闲端口，避免直接崩溃。
+  // 开发环境端口占用时使用空闲端口；生产环境受控关闭并退出，避免代理失联。
   server.on('error', (err: any) => {
     if (err && err.code === 'EADDRINUSE') {
+      if (process.env.NODE_ENV === 'production') {
+        console.error(`[Server] 生产端口 ${PORT} 已被占用，服务未启动。`);
+        void saasRuntime.close()
+          .catch(() => console.error('[Server] 端口冲突后关闭 SaaS 运行时失败。'))
+          .finally(() => process.exit(1));
+        return;
+      }
       console.warn(`[Server] 端口 ${PORT} 已被占用，正在尝试自动分配空闲端口...`);
-      const fallback = app.listen(0, '0.0.0.0', () => attachServerHandlers(fallback));
+      const fallback = app.listen(0, HOST, () => attachServerHandlers(fallback));
     } else {
       console.error('[Server] 启动失败:', err);
     }

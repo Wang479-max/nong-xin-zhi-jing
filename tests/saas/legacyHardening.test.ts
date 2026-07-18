@@ -151,8 +151,9 @@ describe('legacy API hardening', () => {
   it('configures server proxy trust and bucket bounds explicitly from environment', async () => {
     const source = await readFile(new URL('../../server.ts', import.meta.url), 'utf8');
 
-    expect(source).toContain("app.set('trust proxy', 'loopback')");
+    expect(source).toContain('resolveTrustProxy(process.env)');
+    expect(source).toContain("app.set('trust proxy', trustProxyMode)");
     expect(source).toContain('RATE_LIMIT_MAX_BUCKETS');
-    expect(source).toMatch(/trustProxy:\s*trustProxyMode\s*===\s*'loopback'/);
+    expect(source).toMatch(/trustProxy:\s*trustProxyMode\s*!==\s*false/);
   });
 });
