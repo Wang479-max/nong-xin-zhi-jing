@@ -11,6 +11,7 @@ import { createSaasRuntimeFromEnv } from './server/saas/index.ts';
 import { createApiRateLimiter } from './server/saas/http/security.ts';
 import { legacyCommerceApiDisabled, legacyUserApiDisabled } from './server/saas/legacy.ts';
 import { resolveListenHost } from './server/listenHost.ts';
+import { resolveListenPort } from './server/listenPort.ts';
 import { handleListenFailure } from './server/listenFailure.ts';
 import { resolveTrustProxy } from './server/trustProxy.ts';
 import { getUnifiedCrawledKnowledge, REAL_DEEP_LINKED_FALLBACKS, REAL_TIANXING_FALLBACKS, generateExtendedNewsPool, PRESET_IMGS, crawlMoa, getDetailedContent } from './crawlerService.ts';
@@ -159,7 +160,7 @@ export const app = express();
 
 async function startServer() {
   // 优先使用环境变量指定的端口；仅开发环境在端口占用时自动改用空闲端口。
-  const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+  const PORT = resolveListenPort(process.env);
   const HOST = resolveListenHost(process.env);
 
   // Shared API protections must run before the versioned router can terminate a request.

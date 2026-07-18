@@ -51,6 +51,16 @@ describe('production deployment contract', () => {
     expect(server).toContain('listenOnPort(0, false)');
   });
 
+  it('validates the listen port before creating the SaaS runtime', () => {
+    const server = read('server.ts');
+
+    expect(server).toContain("import { resolveListenPort } from './server/listenPort.ts';");
+    expect(server).toMatch(/const PORT = resolveListenPort\(process\.env\);/);
+    expect(server).not.toMatch(/Number\(process\.env\.PORT\)/);
+    expect(server.indexOf('const PORT = resolveListenPort(process.env);'))
+      .toBeLessThan(server.indexOf('createSaasRuntimeFromEnv(process.env)'));
+  });
+
   it('keeps PostgreSQL and Redis private while publishing only the app loopback port', () => {
     const compose = read('docker-compose.yml');
     const app = composeService(compose, 'app');
@@ -194,6 +204,10 @@ describe('production deployment contract', () => {
     ]) {
       expect(manual).toContain(text);
     }
+    expect(manual).toContain('cd "$PROJECT_DIR"');
+    expect(manual).toContain('(cd "$backup_dir" && sha256sum --check agri_saas.dump.sha256)');
+    expect(manual).toContain('< "$backup_dir/agri_saas.dump"');
+    expect(manual).not.toMatch(/\ncd "\$backup_dir"\n/);
     expect(manual).not.toContain('\uFFFD');
   });
 });
