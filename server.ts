@@ -11,6 +11,7 @@ import { createSaasRuntimeFromEnv } from './server/saas/index.ts';
 import { createApiRateLimiter } from './server/saas/http/security.ts';
 import { legacyCommerceApiDisabled, legacyUserApiDisabled } from './server/saas/legacy.ts';
 import { resolveListenHost } from './server/listenHost.ts';
+import { handleListenFailure } from './server/listenFailure.ts';
 import { resolveTrustProxy } from './server/trustProxy.ts';
 import { getUnifiedCrawledKnowledge, REAL_DEEP_LINKED_FALLBACKS, REAL_TIANXING_FALLBACKS, generateExtendedNewsPool, PRESET_IMGS, crawlMoa, getDetailedContent } from './crawlerService.ts';
 import { getPlanDef, getPlotLimit, getAiMonthlyQuota } from './src/data/pricing.ts';
@@ -2887,7 +2888,7 @@ async function startServer() {
     });
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
-    const staticPath = _dirname.includes('dist') ? _dirname : distPath;
+    const staticPath = path.join(distPath, 'public');
     app.use(express.static(staticPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(staticPath, 'index.html'));
@@ -2975,25 +2976,28 @@ async function startServer() {
     }
   };
 
-  // Always listen in development and production to ensure the service is bound
-  const server = app.listen(PORT as number, HOST, () => attachServerHandlers(server));
+  let activeServer: import('http').Server;
+  const listenOnPort = (port: number, allowDevelopmentFallback: boolean): import('http').Server => {
+    const candidate = app.listen(port, HOST, () => attachServerHandlers(candidate));
+    activeServer = candidate;
+    candidate.on('error', (error: unknown) => {
+      void handleListenFailure(error, {
+        production: process.env.NODE_ENV === 'production',
+        allowDevelopmentFallback,
+        closeRuntime: () => saasRuntime.close(),
+        exit: (code) => process.exit(code),
+        logError: (message, detail) => console.error(message, detail ?? ''),
+      }).then((action) => {
+        if (action !== 'retry-random-port') return;
+        console.warn(`[Server] 端口 ${PORT} 已被占用，正在尝试自动分配空闲端口...`);
+        listenOnPort(0, false);
+      });
+    });
+    return candidate;
+  };
 
-  // 开发环境端口占用时使用空闲端口；生产环境受控关闭并退出，避免代理失联。
-  server.on('error', (err: any) => {
-    if (err && err.code === 'EADDRINUSE') {
-      if (process.env.NODE_ENV === 'production') {
-        console.error(`[Server] 生产端口 ${PORT} 已被占用，服务未启动。`);
-        void saasRuntime.close()
-          .catch(() => console.error('[Server] 端口冲突后关闭 SaaS 运行时失败。'))
-          .finally(() => process.exit(1));
-        return;
-      }
-      console.warn(`[Server] 端口 ${PORT} 已被占用，正在尝试自动分配空闲端口...`);
-      const fallback = app.listen(0, HOST, () => attachServerHandlers(fallback));
-    } else {
-      console.error('[Server] 启动失败:', err);
-    }
-  });
+  // 开发环境只允许一次空闲端口回退；所有其他监听失败均关闭运行时并退出。
+  activeServer = listenOnPort(PORT, true);
 
   // ==========================================================================
   // 进程级稳定性兜底（4C 评审：健-长时间运行不崩溃）
@@ -3013,7 +3017,7 @@ async function startServer() {
     console.log(`[Server] 收到 ${signal}，开始优雅关闭...`);
     try { wss?.clients.forEach((c) => c.close()); } catch {}
     const httpClosed = new Promise<void>((resolve) => {
-      server.close(() => resolve());
+      activeServer.close(() => resolve());
     });
     const forceExitTimer = setTimeout(() => process.exit(0), 5000);
     forceExitTimer.unref?.();

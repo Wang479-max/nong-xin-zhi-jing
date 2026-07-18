@@ -23,7 +23,20 @@ describe('production deployment contract', () => {
     expect(manifest.scripts['build:migrate']).toContain('dist/migrate.mjs');
     expect(manifest.scripts['build:migrate']).toContain('dist/migrations');
     expect(manifest.scripts.build).toContain('build:migrate');
+    expect(manifest.scripts.build).toContain('verify:build-layout');
+    expect(manifest.scripts['verify:build-layout']).toContain('scripts/verifyBuildLayout.ts');
     expect(manifest.scripts['db:migrate:prod']).toBe('node dist/migrate.mjs');
+  });
+
+  it('publishes only frontend assets from dist/public', () => {
+    const vite = read('vite.config.ts');
+    const server = read('server.ts');
+
+    expect(vite).toMatch(/outDir:\s*['"]dist\/public['"]/);
+    expect(server).toMatch(/const staticPath = path\.join\(distPath, ['"]public['"]\)/);
+    expect(server).toContain('express.static(staticPath)');
+    expect(server).not.toContain('express.static(distPath)');
+    expect(server).not.toMatch(/_dirname\.includes\(['"]dist['"]\)\s*\?\s*_dirname\s*:\s*distPath/);
   });
 
   it('defaults production host binding to loopback and reuses it for fallback listening', () => {
@@ -32,10 +45,10 @@ describe('production deployment contract', () => {
 
     expect(hostResolver).toContain("environment.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0'");
     expect(server).toMatch(/const HOST = resolveListenHost\(process\.env\)/);
-    expect(server.match(/app\.listen\([^\n]+, HOST,/g)).toHaveLength(2);
+    expect(server).toContain('handleListenFailure');
     expect(server).not.toMatch(/app\.listen\([^\n]+, '0\.0\.0\.0'/);
-    expect(server).toMatch(/if \(process\.env\.NODE_ENV === 'production'\)[\s\S]*saasRuntime\.close\(\)[\s\S]*process\.exit\(1\)/);
-    expect(server).not.toMatch(/生产端口[\s\S]{0,300}process\.exitCode = 1/);
+    expect(server).toMatch(/candidate\.on\(['"]error['"]/);
+    expect(server).toContain('listenOnPort(0, false)');
   });
 
   it('keeps PostgreSQL and Redis private while publishing only the app loopback port', () => {
@@ -71,9 +84,13 @@ describe('production deployment contract', () => {
     expect(nginx).toMatch(/proxy_set_header\s+Connection\s+\$connection_upgrade;/);
     expect(nginx).toMatch(/location\s+~\*\s+[^\n]*(?:assets|js|css)/);
     expect(nginx).toMatch(/expires\s+30d;/);
-    expect(nginx).toMatch(/limit_req_zone\s+\$binary_remote_addr\s+zone=auth_limit:/);
-    expect(nginx).toMatch(/location\s+~\s+\^\/api\/v1\/auth\//);
-    expect(nginx).toMatch(/limit_req\s+zone=auth_limit/);
+    expect(nginx).toMatch(/limit_req_zone\s+\$binary_remote_addr\s+zone=auth_login:[^;]+rate=5r\/m;/);
+    expect(nginx).toMatch(/limit_req_zone\s+\$binary_remote_addr\s+zone=auth_refresh:[^;]+rate=30r\/m;/);
+    expect(nginx).toMatch(/limit_req_status\s+429;/);
+    expect(nginx).toMatch(/location\s+~\s+\^\/api\/v1\/auth\/\(login\|register\)\$/);
+    expect(nginx).toMatch(/limit_req\s+zone=auth_login\s+burst=3\s+nodelay;/);
+    expect(nginx).toMatch(/location\s+=\s+\/api\/v1\/auth\/refresh/);
+    expect(nginx).toMatch(/limit_req\s+zone=auth_refresh\s+burst=10\s+nodelay;/);
   });
 
   it('runs the host service on loopback with systemd sandboxing and restart policy', () => {
@@ -103,11 +120,36 @@ describe('production deployment contract', () => {
     expect(backup).toMatch(/\.pgpass/);
     expect(backup).toMatch(/chmod 600/);
     expect(backup).toMatch(/pg_dump[^\n]*--format=custom/);
-    expect(backup).toMatch(/sha256sum/);
+    expect(backup).toMatch(/dump_name=/);
+    expect(backup).toMatch(/cd "\$backup_dir"/);
+    expect(backup).toMatch(/sha256sum "\$dump_name" > "\$dump_name\.sha256"/);
+    expect(backup).not.toMatch(/sha256sum[^\n]*BACKUP_ROOT/);
     expect(backup).toMatch(/find[^\n]*-mtime[^\n]*-delete/);
     expect(backup).toMatch(/COS_BUCKET/);
     expect(backup).toMatch(/coscmd upload/);
     expect(backup).not.toMatch(/PGPASSWORD|DB_PASS|password\s*=/i);
+  });
+
+  it('backs up private Compose PostgreSQL from inside its network boundary', () => {
+    const backup = read('deploy/scripts/compose_pg_backup.sh');
+
+    expect(backup).toContain('docker compose exec -T postgres');
+    expect(backup).toMatch(/pg_dump[^\n]*--format=custom/);
+    expect(backup).toMatch(/cd "\$backup_dir"/);
+    expect(backup).toMatch(/sha256sum "\$dump_name" > "\$dump_name\.sha256"/);
+    expect(backup).not.toMatch(/PGPASSWORD|DB_PASS|password\s*=/i);
+    expect(backup).not.toMatch(/-p\s*5432:5432|127\.0\.0\.1:5432:5432/);
+  });
+
+  it('installs reliable standalone Certbot renewal hooks', () => {
+    const preHook = read('deploy/certbot/hooks/pre/stop-nginx.sh');
+    const postHook = read('deploy/certbot/hooks/post/start-nginx.sh');
+
+    expect(preHook).toContain('systemctl is-active --quiet nginx');
+    expect(preHook).toContain('systemctl stop nginx');
+    expect(preHook).toContain('/run/nongxinzhijing-certbot-stopped-nginx');
+    expect(postHook).toContain('/run/nongxinzhijing-certbot-stopped-nginx');
+    expect(postHook).toContain('systemctl start nginx');
   });
 
   it('documents only safe, code-compatible environment variable names', () => {
@@ -142,6 +184,13 @@ describe('production deployment contract', () => {
       '宿主机 PostgreSQL', 'docker compose exec -T postgres',
       'Compose 备份不需要开放 5432',
       'Aa1!',
+      'sudo sh -c', 'agri_saas_restore_compose', 'docker compose exec -T postgres pg_restore',
+      '/etc/letsencrypt/renewal-hooks/pre/stop-nginx.sh', 'certbot renew --dry-run',
+      'release_id="$(date +%Y%m%d%H%M%S)"', 'rsync -a', 'ln -sfn',
+      'readlink -f /opt/nongxinzhijing/current', 'rollback_release',
+      'gnupg git rsync', 'node_22.x',
+      'PROJECT_DIR=', 'dropdb --if-exists',
+      'Docker 管理权限的用户本身等同 root',
     ]) {
       expect(manual).toContain(text);
     }

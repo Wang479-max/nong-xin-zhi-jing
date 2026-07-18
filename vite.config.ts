@@ -12,6 +12,9 @@ export default defineConfig(() => {
   return {
     base: process.env.VERCEL ? '/' : './',
     plugins: [react(), tailwindcss(), cesium()],
+    build: {
+      outDir: 'dist/public',
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

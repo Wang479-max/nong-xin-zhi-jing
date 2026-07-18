@@ -2,30 +2,21 @@
 set -Eeuo pipefail
 umask 077
 
+PROJECT_DIR="${PROJECT_DIR:-/opt/nongxinzhijing/current}"
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/nongxinzhijing/postgresql}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
-PG_BACKUP_HOST="${PG_BACKUP_HOST:-127.0.0.1}"
-PG_BACKUP_PORT="${PG_BACKUP_PORT:-5432}"
-PG_BACKUP_DATABASE="${PG_BACKUP_DATABASE:-agri_saas}"
-PG_BACKUP_USER="${PG_BACKUP_USER:-nxzj_app}"
-PGPASSFILE="${PGPASSFILE:-/etc/nongxinzhijing/pg_backup.pgpass}"
 COS_BUCKET="${COS_BUCKET:-}"
 COS_REMOTE_PREFIX="${COS_REMOTE_PREFIX:-postgresql}"
 
-if [[ ! -f "$PGPASSFILE" ]]; then
-  echo "缺少 PostgreSQL 凭据文件：$PGPASSFILE" >&2
-  exit 1
-fi
-chmod 600 "$PGPASSFILE"
-export PGPASSFILE
-
+cd "$PROJECT_DIR"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="$BACKUP_ROOT/$stamp"
-dump_name="${PG_BACKUP_DATABASE}.dump"
+dump_name="agri_saas.dump"
 mkdir -p "$backup_dir"
-cd "$backup_dir"
 
-pg_dump --format=custom --compress=9 --no-owner --no-privileges --host="$PG_BACKUP_HOST" --port="$PG_BACKUP_PORT" --username="$PG_BACKUP_USER" --file="$dump_name" "$PG_BACKUP_DATABASE"
+docker compose exec -T postgres sh -ceu 'exec pg_dump --format=custom --compress=9 --no-owner --no-privileges --username="$POSTGRES_USER" --dbname="$POSTGRES_DB"' > "$backup_dir/$dump_name"
+cd "$backup_dir"
+test -s "$dump_name"
 sha256sum "$dump_name" > "$dump_name.sha256"
 sha256sum --check "$dump_name.sha256"
 
@@ -39,4 +30,4 @@ if [[ -n "$COS_BUCKET" ]]; then
 fi
 
 find "$BACKUP_ROOT" -mindepth 1 -depth -mtime "+$RETENTION_DAYS" -delete
-echo "PostgreSQL 备份完成：$backup_dir（COS：${COS_BUCKET:-未启用}）"
+echo "Compose PostgreSQL 备份完成：$backup_dir（COS：${COS_BUCKET:-未启用}）"
