@@ -21,15 +21,107 @@ describe('PgSaasRepository', () => {
   it('normalizes username lookup parameters and maps timestamps defensively', async () => {
     const db = new ScriptedDb(({ tag }) => tag === 'find-user-by-username' ? [{
       id: 'user-1', normalized_username: 'farmer', platform_role: 'user',
+      normalized_email: 'farmer@legacy.invalid', display_name: 'farmer', account_status: 'active',
       created_at: new Date('2030-01-01T00:00:00.000Z'), password_hash: 'hash',
     }] : []);
     const repository = new PgSaasRepository(db as never);
 
     await expect(repository.findUserByUsername(' Farmer ')).resolves.toEqual({
-      user: { id: 'user-1', username: 'farmer', platformRole: 'user', createdAt: '2030-01-01T00:00:00.000Z' },
+      user: {
+        id: 'user-1', username: 'farmer', email: 'farmer@legacy.invalid', displayName: 'farmer',
+        accountStatus: 'active', platformRole: 'user', createdAt: '2030-01-01T00:00:00.000Z',
+      },
       passwordHash: 'hash',
     });
     expect(db.call('find-user-by-username')?.values).toEqual(['farmer']);
+  });
+
+  it('creates and finds verified email identity in one registration transaction', async () => {
+    const db = new ScriptedDb(({ tag }) => tag === 'free-subscription-product' ? [{
+      id: 'free', plan_id: 'free', features: ['monitoring.basic'], limits: { plots: 2 },
+    }] : tag === 'find-user-by-email' ? [{
+      id: 'user-1', normalized_username: 'grower@example.com', normalized_email: 'grower@example.com',
+      display_name: 'grower', account_status: 'active', platform_role: 'user',
+      created_at: '2030-01-01T00:00:00.000Z', password_hash: 'hash',
+    }] : []);
+    const repository = new PgSaasRepository(db as never);
+
+    const context = await repository.createUserWithOrganization({
+      email: ' GROWER@Example.COM ',
+      displayName: 'grower',
+      passwordHash: 'hash',
+      emailVerifiedAt: '2030-01-01T00:00:00.000Z',
+    });
+
+    expect(context.user).toMatchObject({
+      username: 'grower@example.com', email: 'grower@example.com',
+      displayName: 'grower', accountStatus: 'active',
+    });
+    expect(db.tags()).toEqual([
+      'begin', 'insert-user', 'insert-user-credential', 'insert-personal-organization',
+      'insert-owner-membership', 'free-subscription-product', 'insert-free-subscription', 'commit',
+    ]);
+    expect(db.call('insert-user')?.values).toEqual(expect.arrayContaining([
+      'grower@example.com', 'grower@example.com', 'grower', '2030-01-01T00:00:00.000Z', 'active',
+    ]));
+
+    await expect(repository.findUserByEmail(' GROWER@EXAMPLE.COM ')).resolves.toEqual({
+      user: {
+        id: 'user-1', username: 'grower@example.com', email: 'grower@example.com',
+        displayName: 'grower', accountStatus: 'active', platformRole: 'user',
+        createdAt: '2030-01-01T00:00:00.000Z',
+      },
+      passwordHash: 'hash',
+    });
+    expect(db.call('find-user-by-email')?.values).toEqual(['grower@example.com']);
+  });
+
+  it('maps duplicate verified email registrations to EMAIL_TAKEN', async () => {
+    const db = new ScriptedDb(({ tag }) => {
+      if (tag === 'insert-user') throw Object.assign(new Error('duplicate'), {
+        code: '23505', constraint: 'users_normalized_email_idx',
+      });
+      return [];
+    });
+
+    await expect(new PgSaasRepository(db as never).createUserWithOrganization({
+      email: 'grower@example.com',
+      displayName: 'grower',
+      passwordHash: 'hash',
+      emailVerifiedAt: '2030-01-01T00:00:00.000Z',
+    })).rejects.toMatchObject({ code: 'EMAIL_TAKEN' });
+    expect(db.tags()).toEqual(['begin', 'insert-user', 'rollback']);
+  });
+
+  it('resets a password and revokes active sessions for that user in one transaction', async () => {
+    const db = new ScriptedDb(({ tag }) => tag === 'reset-password' ? [{ user_id: 'user-1' }] : []);
+    const repository = new PgSaasRepository(db as never);
+
+    await repository.resetPasswordAndRevokeSessions({
+      userId: 'user-1', passwordHash: 'new-hash', revokedAt: '2030-01-03T00:00:00.000Z',
+    });
+
+    expect(db.tags()).toEqual(['begin', 'reset-password', 'revoke-user-refresh-sessions', 'commit']);
+    expect(db.call('reset-password')?.values).toEqual([
+      'user-1', 'new-hash', '2030-01-03T00:00:00.000Z',
+    ]);
+    expect(db.call('revoke-user-refresh-sessions')?.values).toEqual([
+      'user-1', '2030-01-03T00:00:00.000Z',
+    ]);
+    expect(db.call('revoke-user-refresh-sessions')?.text).toMatch(/user_id\s*=\s*\$1[\s\S]*revoked_at\s+is\s+null/i);
+  });
+
+  it('rolls back password changes when session revocation fails', async () => {
+    const db = new ScriptedDb(({ tag }) => {
+      if (tag === 'reset-password') return [{ user_id: 'user-1' }];
+      if (tag === 'revoke-user-refresh-sessions') throw new Error('session update failed');
+      return [];
+    });
+
+    await expect(new PgSaasRepository(db as never).resetPasswordAndRevokeSessions({
+      userId: 'user-1', passwordHash: 'new-hash', revokedAt: '2030-01-03T00:00:00.000Z',
+    })).rejects.toThrow('session update failed');
+    expect(db.tags()).toEqual(['begin', 'reset-password', 'revoke-user-refresh-sessions', 'rollback']);
   });
 
   it('maps catalog JSON and rejects unapproved or invalid defensive values', async () => {

@@ -1,4 +1,4 @@
-import type { SaasRepository } from './repository';
+import type { SaasRepository, UserRegistrationInput } from './repository';
 import {
   SaasDomainError,
   type EntitlementSnapshot,
@@ -76,11 +76,14 @@ const AI_PRO_ADDON: Product = {
 
 const copy = <T>(value: T): T => structuredClone(value);
 const normalizedUsername = (username: string): string => username.trim().toLowerCase();
+const normalizedEmail = (email: string): string => email.trim().toLowerCase();
+const legacyEmail = (username: string): string => username.includes('@') ? username : `${username}@legacy.invalid`;
 
 export class MemorySaasRepository implements SaasRepository {
   private sequence = 0;
   private readonly usersById = new Map<string, UserWithCredential>();
   private readonly userIdsByUsername = new Map<string, string>();
+  private readonly userIdsByEmail = new Map<string, string>();
   private readonly organizationsById = new Map<string, Organization>();
   private readonly membershipsByUserId = new Map<string, Membership>();
   private readonly baseProductIdsByOrganizationId = new Map<string, string>();
@@ -95,20 +98,35 @@ export class MemorySaasRepository implements SaasRepository {
     [AI_PRO_ADDON.id, AI_PRO_ADDON],
   ]);
 
-  async createUserWithOrganization(input: { username: string; passwordHash: string }): Promise<UserContext> {
-    const username = normalizedUsername(input.username);
+  async createUserWithOrganization(input: UserRegistrationInput): Promise<UserContext> {
+    const verifiedEmailRegistration = 'email' in input;
+    const username = verifiedEmailRegistration ? normalizedEmail(input.email) : normalizedUsername(input.username);
+    const email = verifiedEmailRegistration ? username : legacyEmail(username);
+    const displayName = verifiedEmailRegistration ? input.displayName.trim() : username;
     if (this.userIdsByUsername.has(username)) {
+      if (verifiedEmailRegistration) throw new SaasDomainError('EMAIL_TAKEN', 'Email is already taken.');
       throw new SaasDomainError('USERNAME_TAKEN', 'Username is already taken.');
+    }
+    if (this.userIdsByEmail.has(email)) {
+      throw new SaasDomainError('EMAIL_TAKEN', 'Email is already taken.');
     }
 
     const createdAt = new Date().toISOString();
     const user: UserWithCredential = {
-      user: { id: this.nextId('user'), username, platformRole: 'user', createdAt },
+      user: {
+        id: this.nextId('user'),
+        username,
+        email,
+        displayName,
+        accountStatus: 'active',
+        platformRole: 'user',
+        createdAt,
+      },
       passwordHash: input.passwordHash,
     };
     const organization: Organization = {
       id: this.nextId('org'),
-      name: `${username}'s organization`,
+      name: `${displayName}'s organization`,
       createdAt,
     };
     const membership: Membership = {
@@ -122,6 +140,7 @@ export class MemorySaasRepository implements SaasRepository {
 
     this.usersById.set(user.user.id, user);
     this.userIdsByUsername.set(username, user.user.id);
+    this.userIdsByEmail.set(email, user.user.id);
     this.organizationsById.set(organization.id, organization);
     this.membershipsByUserId.set(user.user.id, membership);
     this.baseProductIdsByOrganizationId.set(organization.id, FREE_PRODUCT.id);
@@ -132,6 +151,12 @@ export class MemorySaasRepository implements SaasRepository {
 
   async findUserByUsername(username: string): Promise<UserWithCredential | null> {
     const userId = this.userIdsByUsername.get(normalizedUsername(username));
+    const user = userId ? this.usersById.get(userId) : undefined;
+    return user ? copy(user) : null;
+  }
+
+  async findUserByEmail(email: string): Promise<UserWithCredential | null> {
+    const userId = this.userIdsByEmail.get(normalizedEmail(email));
     const user = userId ? this.usersById.get(userId) : undefined;
     return user ? copy(user) : null;
   }
@@ -167,6 +192,22 @@ export class MemorySaasRepository implements SaasRepository {
   async revokeRefreshSession(tokenHash: string): Promise<void> {
     const session = this.refreshSessionsByTokenHash.get(tokenHash);
     if (session) session.revokedAt = new Date().toISOString();
+  }
+
+  async resetPasswordAndRevokeSessions(input: {
+    userId: string;
+    passwordHash: string;
+    revokedAt: string;
+  }): Promise<void> {
+    const credential = this.usersById.get(input.userId);
+    if (!credential) throw new SaasDomainError('USER_NOT_FOUND', 'User was not found.');
+
+    credential.passwordHash = input.passwordHash;
+    for (const session of this.refreshSessionsByTokenHash.values()) {
+      if (session.userId === input.userId && session.revokedAt === null) {
+        session.revokedAt = input.revokedAt;
+      }
+    }
   }
 
   async rotateRefreshSession(

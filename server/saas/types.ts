@@ -1,4 +1,5 @@
 export type PlatformRole = 'platform_admin' | 'user';
+export type AccountStatus = 'active' | 'disabled';
 export type MembershipRole = 'owner' | 'admin' | 'expert' | 'operator' | 'viewer';
 export type FeatureKey =
   | 'monitoring.basic'
@@ -13,6 +14,9 @@ export type FeatureKey =
 export interface User {
   id: string;
   username: string;
+  email: string;
+  displayName: string;
+  accountStatus: AccountStatus;
   platformRole: PlatformRole;
   createdAt: string;
 }
@@ -106,6 +110,7 @@ export interface UserContext {
 
 export type SaasDomainErrorCode =
   | 'USERNAME_TAKEN'
+  | 'EMAIL_TAKEN'
   | 'USER_NOT_FOUND'
   | 'ORGANIZATION_NOT_FOUND'
   | 'ORDER_NOT_FOUND'

@@ -9,14 +9,38 @@ import type {
   UserWithCredential,
 } from './types';
 
+export interface LegacyUserRegistrationInput {
+  username: string;
+  passwordHash: string;
+  email?: never;
+  displayName?: never;
+  emailVerifiedAt?: never;
+}
+
+export interface VerifiedEmailRegistrationInput {
+  email: string;
+  displayName: string;
+  passwordHash: string;
+  emailVerifiedAt: string;
+  username?: never;
+}
+
+export type UserRegistrationInput = LegacyUserRegistrationInput | VerifiedEmailRegistrationInput;
+
 export interface SaasRepository {
-  createUserWithOrganization(input: { username: string; passwordHash: string }): Promise<UserContext>;
+  createUserWithOrganization(input: UserRegistrationInput): Promise<UserContext>;
   findUserByUsername(username: string): Promise<UserWithCredential | null>;
+  findUserByEmail(email: string): Promise<UserWithCredential | null>;
   findUserContext(userId: string): Promise<UserContext | null>;
   setUserPlatformRole(userId: string, role: PlatformRole): Promise<User>;
   saveRefreshSession(session: RefreshSession): Promise<void>;
   findRefreshSession(tokenHash: string): Promise<RefreshSession | null>;
   revokeRefreshSession(tokenHash: string): Promise<void>;
+  resetPasswordAndRevokeSessions(input: {
+    userId: string;
+    passwordHash: string;
+    revokedAt: string;
+  }): Promise<void>;
   /** Atomically consumes an active session and stores its replacement, or returns null without mutation. */
   rotateRefreshSession(currentTokenHash: string, replacementSession: RefreshSession, now: number): Promise<RefreshSession | null>;
   listProducts(): Promise<Product[]>;

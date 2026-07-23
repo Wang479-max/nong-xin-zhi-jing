@@ -21,6 +21,71 @@ describe('MemorySaasRepository', () => {
       .rejects.toMatchObject({ code: 'USERNAME_TAKEN' });
   });
 
+  it('creates and finds a verified account by normalized email', async () => {
+    const repo = new MemorySaasRepository();
+    const context = await repo.createUserWithOrganization({
+      email: ' GROWER@Example.COM ',
+      displayName: 'grower',
+      passwordHash: 'hash',
+      emailVerifiedAt: '2030-01-01T00:00:00.000Z',
+    });
+
+    expect(context.user).toMatchObject({
+      username: 'grower@example.com',
+      email: 'grower@example.com',
+      displayName: 'grower',
+      accountStatus: 'active',
+    });
+    await expect(repo.findUserByEmail(' GROWER@EXAMPLE.COM ')).resolves.toEqual({
+      user: context.user,
+      passwordHash: 'hash',
+    });
+    await expect(repo.createUserWithOrganization({
+      email: 'grower@example.com',
+      displayName: 'another grower',
+      passwordHash: 'hash-2',
+      emailVerifiedAt: '2030-01-02T00:00:00.000Z',
+    })).rejects.toMatchObject({ code: 'EMAIL_TAKEN' });
+  });
+
+  it('resets a password and revokes only that user active sessions atomically', async () => {
+    const repo = new MemorySaasRepository();
+    const target = await repo.createUserWithOrganization({ username: 'target', passwordHash: 'old-hash' });
+    const other = await repo.createUserWithOrganization({ username: 'other', passwordHash: 'other-hash' });
+    await repo.saveRefreshSession({
+      tokenHash: 'target-active', userId: target.user.id, expiresAt: '2030-02-01T00:00:00.000Z', revokedAt: null,
+    });
+    await repo.saveRefreshSession({
+      tokenHash: 'target-revoked', userId: target.user.id,
+      expiresAt: '2030-02-01T00:00:00.000Z', revokedAt: '2030-01-01T00:00:00.000Z',
+    });
+    await repo.saveRefreshSession({
+      tokenHash: 'other-active', userId: other.user.id, expiresAt: '2030-02-01T00:00:00.000Z', revokedAt: null,
+    });
+
+    await repo.resetPasswordAndRevokeSessions({
+      userId: target.user.id, passwordHash: 'new-hash', revokedAt: '2030-01-03T00:00:00.000Z',
+    });
+
+    await expect(repo.findUserByUsername('target')).resolves.toMatchObject({ passwordHash: 'new-hash' });
+    await expect(repo.findUserByUsername('other')).resolves.toMatchObject({ passwordHash: 'other-hash' });
+    await expect(repo.findRefreshSession('target-active')).resolves.toMatchObject({
+      revokedAt: '2030-01-03T00:00:00.000Z',
+    });
+    await expect(repo.findRefreshSession('target-revoked')).resolves.toMatchObject({
+      revokedAt: '2030-01-01T00:00:00.000Z',
+    });
+    await expect(repo.findRefreshSession('other-active')).resolves.toMatchObject({ revokedAt: null });
+
+    await repo.saveRefreshSession({
+      tokenHash: 'missing-user-session', userId: 'missing', expiresAt: '2030-02-01T00:00:00.000Z', revokedAt: null,
+    });
+    await expect(repo.resetPasswordAndRevokeSessions({
+      userId: 'missing', passwordHash: 'unused', revokedAt: '2030-01-04T00:00:00.000Z',
+    })).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+    await expect(repo.findRefreshSession('missing-user-session')).resolves.toMatchObject({ revokedAt: null });
+  });
+
   it('creates a public user with the approved roles and free entitlement baseline', async () => {
     const repo = new MemorySaasRepository();
 

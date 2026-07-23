@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import type { SaasRepository } from '../repository';
+import type { SaasRepository, UserRegistrationInput } from '../repository';
 import {
   BillingError,
   SaasDomainError,
@@ -37,13 +37,25 @@ const MEMBERSHIP_ROLES = new Set<MembershipRole>(['owner', 'admin', 'expert', 'o
 export class PgSaasRepository implements SaasRepository {
   constructor(private readonly database: Database) {}
 
-  async createUserWithOrganization(input: { username: string; passwordHash: string }): Promise<UserContext> {
-    const username = normalizeUsername(input.username);
+  async createUserWithOrganization(input: UserRegistrationInput): Promise<UserContext> {
+    const verifiedEmailRegistration = 'email' in input;
+    const username = verifiedEmailRegistration ? normalizeEmail(input.email) : normalizeUsername(input.username);
+    const email = verifiedEmailRegistration ? username : legacyEmail(username);
+    const displayName = verifiedEmailRegistration ? input.displayName.trim() : username;
     const createdAt = new Date().toISOString();
-    const user: User = { id: randomUUID(), username, platformRole: 'user', createdAt };
+    const emailVerifiedAt = verifiedEmailRegistration ? input.emailVerifiedAt : createdAt;
+    const user: User = {
+      id: randomUUID(),
+      username,
+      email,
+      displayName,
+      accountStatus: 'active',
+      platformRole: 'user',
+      createdAt,
+    };
     const organization: Organization = {
       id: randomUUID(),
-      name: `${username}'s organization`,
+      name: `${displayName}'s organization`,
       createdAt,
     };
     const membership: Membership = {
@@ -57,8 +69,12 @@ export class PgSaasRepository implements SaasRepository {
     try {
       return await this.transaction(async (client) => {
         await client.query(
-          '/* insert-user */ INSERT INTO users (id, normalized_username, platform_role, created_at, updated_at) VALUES ($1, $2, $3, $4, $4)',
-          [user.id, username, 'user', createdAt],
+          `/* insert-user */
+           INSERT INTO users
+             (id, normalized_username, normalized_email, display_name, email_verified_at,
+              account_status, platform_role, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+          [user.id, username, email, displayName, emailVerifiedAt, 'active', 'user', createdAt],
         );
         await client.query(
           '/* insert-user-credential */ INSERT INTO user_credentials (user_id, password_hash, created_at, updated_at) VALUES ($1, $2, $3, $3)',
@@ -109,6 +125,12 @@ export class PgSaasRepository implements SaasRepository {
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
+        if (verifiedEmailRegistration) {
+          throw new SaasDomainError('EMAIL_TAKEN', 'Email is already taken.');
+        }
+        if (postgresConstraint(error).includes('normalized_email')) {
+          throw new SaasDomainError('EMAIL_TAKEN', 'Email is already taken.');
+        }
         throw new SaasDomainError('USERNAME_TAKEN', 'Username is already taken.');
       }
       throw error;
@@ -118,7 +140,8 @@ export class PgSaasRepository implements SaasRepository {
   async findUserByUsername(username: string): Promise<UserWithCredential | null> {
     const result = await this.database.query<Row>(
       `/* find-user-by-username */
-       SELECT u.id, u.normalized_username, u.platform_role, u.created_at, c.password_hash
+       SELECT u.id, u.normalized_username, u.normalized_email, u.display_name, u.account_status,
+              u.platform_role, u.created_at, c.password_hash
        FROM users u
        JOIN user_credentials c ON c.user_id = u.id
        WHERE u.normalized_username = $1`,
@@ -128,10 +151,25 @@ export class PgSaasRepository implements SaasRepository {
     return row ? { user: mapUser(row), passwordHash: asString(row.password_hash) } : null;
   }
 
+  async findUserByEmail(email: string): Promise<UserWithCredential | null> {
+    const result = await this.database.query<Row>(
+      `/* find-user-by-email */
+       SELECT u.id, u.normalized_username, u.normalized_email, u.display_name, u.account_status,
+              u.platform_role, u.created_at, c.password_hash
+       FROM users u
+       JOIN user_credentials c ON c.user_id = u.id
+       WHERE u.normalized_email = $1`,
+      [normalizeEmail(email)],
+    );
+    const row = result.rows[0];
+    return row ? { user: mapUser(row), passwordHash: asString(row.password_hash) } : null;
+  }
+
   async findUserContext(userId: string): Promise<UserContext | null> {
     const result = await this.database.query<Row>(
       `/* find-user-context */
-       SELECT u.id AS user_id, u.normalized_username, u.platform_role, u.created_at AS user_created_at,
+       SELECT u.id AS user_id, u.normalized_username, u.normalized_email, u.display_name, u.account_status,
+              u.platform_role, u.created_at AS user_created_at,
               m.id AS membership_id, m.organization_id, m.role, m.created_at AS membership_created_at,
               o.name AS organization_name, o.created_at AS organization_created_at
        FROM users u
@@ -152,6 +190,9 @@ export class PgSaasRepository implements SaasRepository {
       user: {
         id: asString(row.user_id),
         username: asString(row.normalized_username),
+        email: mappedEmail(row),
+        displayName: mappedDisplayName(row),
+        accountStatus: row.account_status === 'disabled' ? 'disabled' : 'active',
         platformRole: asPlatformRole(row.platform_role),
         createdAt: asIso(row.user_created_at),
       },
@@ -176,7 +217,7 @@ export class PgSaasRepository implements SaasRepository {
       `/* set-user-platform-role */
        UPDATE users SET platform_role = $2, updated_at = now()
        WHERE id = $1
-       RETURNING id, normalized_username, platform_role, created_at`,
+       RETURNING id, normalized_username, normalized_email, display_name, account_status, platform_role, created_at`,
       [userId, role],
     );
     const row = result.rows[0];
@@ -210,6 +251,33 @@ export class PgSaasRepository implements SaasRepository {
        UPDATE refresh_sessions SET revoked_at = COALESCE(revoked_at, now()) WHERE token_hash = $1`,
       [tokenHash],
     );
+  }
+
+  async resetPasswordAndRevokeSessions(input: {
+    userId: string;
+    passwordHash: string;
+    revokedAt: string;
+  }): Promise<void> {
+    await this.transaction(async (client) => {
+      const credential = await client.query<Row>(
+        `/* reset-password */
+         UPDATE user_credentials
+         SET password_hash = $2, updated_at = $3
+         WHERE user_id = $1
+         RETURNING user_id`,
+        [input.userId, input.passwordHash, input.revokedAt],
+      );
+      if (!credential.rows[0]) {
+        throw new SaasDomainError('USER_NOT_FOUND', 'User was not found.');
+      }
+      await client.query(
+        `/* revoke-user-refresh-sessions */
+         UPDATE refresh_sessions
+         SET revoked_at = $2
+         WHERE user_id = $1 AND revoked_at IS NULL`,
+        [input.userId, input.revokedAt],
+      );
+    });
   }
 
   async rotateRefreshSession(
@@ -561,13 +629,33 @@ function normalizeUsername(username: string): string {
   return username.trim().toLowerCase();
 }
 
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function legacyEmail(username: string): string {
+  return username.includes('@') ? username : `${username}@legacy.invalid`;
+}
+
 function mapUser(row: Row): User {
   return {
     id: asString(row.id),
     username: asString(row.normalized_username),
+    email: mappedEmail(row),
+    displayName: mappedDisplayName(row),
+    accountStatus: row.account_status === 'disabled' ? 'disabled' : 'active',
     platformRole: asPlatformRole(row.platform_role),
     createdAt: asIso(row.created_at),
   };
+}
+
+function mappedEmail(row: Row): string {
+  const email = normalizeEmail(asString(row.normalized_email));
+  return email || legacyEmail(normalizeUsername(asString(row.normalized_username)));
+}
+
+function mappedDisplayName(row: Row): string {
+  return asString(row.display_name) || asString(row.normalized_username);
 }
 
 function mapProduct(row: Row): Product {

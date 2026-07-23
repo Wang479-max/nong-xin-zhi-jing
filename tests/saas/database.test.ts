@@ -36,6 +36,7 @@ describe('migration runner', () => {
 
     expect(migrations.map(({ version, name }) => ({ version, name }))).toEqual([
       { version: 1, name: '001_saas_foundation.sql' },
+      { version: 2, name: '002_email_identity.sql' },
     ]);
     expect(migrations[0].checksum).toMatch(/^[a-f0-9]{64}$/);
   });

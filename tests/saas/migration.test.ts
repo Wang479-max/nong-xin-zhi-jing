@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const migrationPath = fileURLToPath(new URL('../../server/saas/db/migrations/001_saas_foundation.sql', import.meta.url));
+const emailIdentityMigrationPath = fileURLToPath(new URL('../../server/saas/db/migrations/002_email_identity.sql', import.meta.url));
 const coreTables = [
   'users',
   'user_credentials',
@@ -102,6 +103,28 @@ describe('SaaS foundation migration', () => {
     expect(sql).toMatch(/create\s+(?:unique\s+)?index[\s\S]*organization_members[\s\S]*organization_id/i);
     expect(sql).toMatch(/create\s+(?:unique\s+)?index[\s\S]*orders[\s\S]*organization_id/i);
     expect(sql).toMatch(/create\s+(?:unique\s+)?index[\s\S]*entitlements[\s\S]*organization_id/i);
+  });
+});
+
+describe('email identity migration', () => {
+  it('backfills normalized verified email identity without removing username compatibility', async () => {
+    const sql = await readFile(emailIdentityMigrationPath, 'utf8');
+
+    expect(sql).toMatch(/alter\s+table\s+users\s+add\s+column\s+normalized_email\s+text/i);
+    expect(sql).toMatch(/alter\s+table\s+users\s+add\s+column\s+display_name\s+text/i);
+    expect(sql).toMatch(/alter\s+table\s+users\s+add\s+column\s+email_verified_at\s+timestamptz/i);
+    expect(sql).toMatch(/alter\s+table\s+users\s+add\s+column\s+account_status\s+text\s+not\s+null\s+default\s+'active'/i);
+    expect(sql).toMatch(
+      /update\s+users\s+set\s+normalized_email\s*=\s*case\s+when\s+normalized_username\s+like\s+'%@%'\s+then\s+lower\s*\(\s*btrim\s*\(\s*normalized_username\s*\)\s*\)\s+else\s+lower\s*\(\s*btrim\s*\(\s*normalized_username\s*\)\s*\)\s*\|\|\s*'@legacy\.invalid'\s+end/i,
+    );
+    expect(sql).toMatch(/display_name\s*=\s*normalized_username/i);
+    expect(sql).toMatch(/email_verified_at\s*=\s*created_at/i);
+    expect(sql).toMatch(/alter\s+table\s+users\s+alter\s+column\s+normalized_email\s+set\s+not\s+null/i);
+    expect(sql).toMatch(/alter\s+table\s+users\s+alter\s+column\s+display_name\s+set\s+not\s+null/i);
+    expect(sql).toMatch(/users_normalized_email_format[\s\S]*normalized_email\s*=\s*lower\s*\(\s*btrim\s*\(\s*normalized_email\s*\)\s*\)[\s\S]*normalized_email\s+like\s+'%_@_%\.__%'/i);
+    expect(sql).toMatch(/users_account_status[\s\S]*account_status\s+in\s*\(\s*'active'\s*,\s*'disabled'\s*\)/i);
+    expect(sql).toMatch(/create\s+unique\s+index\s+users_normalized_email_idx\s+on\s+users\s*\(\s*normalized_email\s*\)/i);
+    expect(sql).not.toMatch(/drop\s+column\s+normalized_username/i);
   });
 });
 

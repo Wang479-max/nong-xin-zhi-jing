@@ -138,7 +138,15 @@ function contextWith(overrides: Partial<EntitlementSnapshot>): UserContext {
     features: ['monitoring.basic'], limits: { aiMonthly: 5, plots: 2 }, ...overrides,
   };
   return {
-    user: { id: 'user-test', username: 'user', platformRole: 'user', createdAt: '2030-01-01T00:00:00.000Z' },
+    user: {
+      id: 'user-test',
+      username: 'user',
+      email: 'user@legacy.invalid',
+      displayName: 'user',
+      accountStatus: 'active',
+      platformRole: 'user',
+      createdAt: '2030-01-01T00:00:00.000Z',
+    },
     organization: { id: 'org-test', name: 'Test organization', createdAt: '2030-01-01T00:00:00.000Z' },
     membership: { id: 'membership-test', userId: 'user-test', organizationId: 'org-test', role: 'owner', createdAt: '2030-01-01T00:00:00.000Z' },
     entitlement,
