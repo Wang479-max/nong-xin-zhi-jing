@@ -111,6 +111,7 @@ export interface UserContext {
 export type SaasDomainErrorCode =
   | 'USERNAME_TAKEN'
   | 'EMAIL_TAKEN'
+  | 'VALIDATION_ERROR'
   | 'USER_NOT_FOUND'
   | 'ORGANIZATION_NOT_FOUND'
   | 'ORDER_NOT_FOUND'

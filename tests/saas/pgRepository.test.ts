@@ -6,6 +6,7 @@ describe('PgSaasRepository', () => {
   it('promotes a user with a parameterized update and returns a stable missing-user error', async () => {
     const db = new ScriptedDb(({ tag }) => tag === 'set-user-platform-role' ? [{
       id: 'user-1', normalized_username: 'admin', platform_role: 'platform_admin', created_at: '2030-01-01T00:00:00.000Z',
+      normalized_email: 'admin@legacy.invalid', display_name: 'admin', account_status: 'active',
     }] : []);
     const repository = new PgSaasRepository(db as never);
 
@@ -36,6 +37,17 @@ describe('PgSaasRepository', () => {
     expect(db.call('find-user-by-username')?.values).toEqual(['farmer']);
   });
 
+  it.each([null, 'pending'])('fails closed for invalid account status %j', async (accountStatus) => {
+    const db = new ScriptedDb(({ tag }) => tag === 'find-user-by-email' ? [{
+      id: 'user-1', normalized_username: 'grower@example.com', normalized_email: 'grower@example.com',
+      display_name: 'grower', account_status: accountStatus, platform_role: 'user',
+      created_at: '2030-01-01T00:00:00.000Z', password_hash: 'hash',
+    }] : []);
+
+    await expect(new PgSaasRepository(db as never).findUserByEmail('grower@example.com'))
+      .rejects.toThrow('Invalid account status.');
+  });
+
   it('creates and finds verified email identity in one registration transaction', async () => {
     const db = new ScriptedDb(({ tag }) => tag === 'free-subscription-product' ? [{
       id: 'free', plan_id: 'free', features: ['monitoring.basic'], limits: { plots: 2 },
@@ -49,7 +61,7 @@ describe('PgSaasRepository', () => {
     const context = await repository.createUserWithOrganization({
       email: ' GROWER@Example.COM ',
       displayName: 'grower',
-      passwordHash: 'hash',
+      passwordHash: '  exact hash bytes  ',
       emailVerifiedAt: '2030-01-01T00:00:00.000Z',
     });
 
@@ -64,6 +76,7 @@ describe('PgSaasRepository', () => {
     expect(db.call('insert-user')?.values).toEqual(expect.arrayContaining([
       'grower@example.com', 'grower@example.com', 'grower', '2030-01-01T00:00:00.000Z', 'active',
     ]));
+    expect(db.call('insert-user-credential')?.values).toContain('  exact hash bytes  ');
 
     await expect(repository.findUserByEmail(' GROWER@EXAMPLE.COM ')).resolves.toEqual({
       user: {

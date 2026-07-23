@@ -114,11 +114,12 @@ describe('email identity migration', () => {
     expect(sql).toMatch(/alter\s+table\s+users\s+add\s+column\s+display_name\s+text/i);
     expect(sql).toMatch(/alter\s+table\s+users\s+add\s+column\s+email_verified_at\s+timestamptz/i);
     expect(sql).toMatch(/alter\s+table\s+users\s+add\s+column\s+account_status\s+text\s+not\s+null\s+default\s+'active'/i);
-    expect(sql).toMatch(
-      /update\s+users\s+set\s+normalized_email\s*=\s*case\s+when\s+normalized_username\s+like\s+'%@%'\s+then\s+lower\s*\(\s*btrim\s*\(\s*normalized_username\s*\)\s*\)\s+else\s+lower\s*\(\s*btrim\s*\(\s*normalized_username\s*\)\s*\)\s*\|\|\s*'@legacy\.invalid'\s+end/i,
-    );
+    expect(sql).toMatch(/row_number\s*\(\s*\)\s+over\s*\(\s*order\s+by\s+id\s*\)/i);
+    expect(sql).toMatch(/'legacy\+'\s*\|\|[\s\S]*'@legacy\.invalid'/i);
+    expect(sql).toMatch(/normalized_username[\s\S]*~[\s\S]*@[\s\S]*\\\.[\s\S]*not\s+like\s+'%@legacy\.invalid'/i);
     expect(sql).toMatch(/display_name\s*=\s*normalized_username/i);
-    expect(sql).toMatch(/email_verified_at\s*=\s*created_at/i);
+    expect(sql).toMatch(/email_verified_at\s*=\s*null/i);
+    expect(sql).toMatch(/raise\s+exception[\s\S]*duplicate\s+normalized_email/i);
     expect(sql).toMatch(/alter\s+table\s+users\s+alter\s+column\s+normalized_email\s+set\s+not\s+null/i);
     expect(sql).toMatch(/alter\s+table\s+users\s+alter\s+column\s+display_name\s+set\s+not\s+null/i);
     expect(sql).toMatch(/users_normalized_email_format[\s\S]*normalized_email\s*=\s*lower\s*\(\s*btrim\s*\(\s*normalized_email\s*\)\s*\)[\s\S]*normalized_email\s+like\s+'%_@_%\.__%'/i);

@@ -27,6 +27,12 @@ export interface VerifiedEmailRegistrationInput {
 
 export type UserRegistrationInput = LegacyUserRegistrationInput | VerifiedEmailRegistrationInput;
 
+export interface PasswordResetInput {
+  userId: string;
+  passwordHash: string;
+  revokedAt: string;
+}
+
 export interface SaasRepository {
   createUserWithOrganization(input: UserRegistrationInput): Promise<UserContext>;
   findUserByUsername(username: string): Promise<UserWithCredential | null>;
@@ -36,11 +42,7 @@ export interface SaasRepository {
   saveRefreshSession(session: RefreshSession): Promise<void>;
   findRefreshSession(tokenHash: string): Promise<RefreshSession | null>;
   revokeRefreshSession(tokenHash: string): Promise<void>;
-  resetPasswordAndRevokeSessions(input: {
-    userId: string;
-    passwordHash: string;
-    revokedAt: string;
-  }): Promise<void>;
+  resetPasswordAndRevokeSessions(input: PasswordResetInput): Promise<void>;
   /** Atomically consumes an active session and stores its replacement, or returns null without mutation. */
   rotateRefreshSession(currentTokenHash: string, replacementSession: RefreshSession, now: number): Promise<RefreshSession | null>;
   listProducts(): Promise<Product[]>;

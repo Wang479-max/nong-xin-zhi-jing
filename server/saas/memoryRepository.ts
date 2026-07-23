@@ -1,4 +1,5 @@
-import type { SaasRepository, UserRegistrationInput } from './repository';
+import { validatePasswordResetInput, validateUserRegistrationInput } from './identityValidation';
+import type { PasswordResetInput, SaasRepository, UserRegistrationInput } from './repository';
 import {
   SaasDomainError,
   type EntitlementSnapshot,
@@ -99,6 +100,7 @@ export class MemorySaasRepository implements SaasRepository {
   ]);
 
   async createUserWithOrganization(input: UserRegistrationInput): Promise<UserContext> {
+    validateUserRegistrationInput(input);
     const verifiedEmailRegistration = 'email' in input;
     const username = verifiedEmailRegistration ? normalizedEmail(input.email) : normalizedUsername(input.username);
     const email = verifiedEmailRegistration ? username : legacyEmail(username);
@@ -194,11 +196,8 @@ export class MemorySaasRepository implements SaasRepository {
     if (session) session.revokedAt = new Date().toISOString();
   }
 
-  async resetPasswordAndRevokeSessions(input: {
-    userId: string;
-    passwordHash: string;
-    revokedAt: string;
-  }): Promise<void> {
+  async resetPasswordAndRevokeSessions(input: PasswordResetInput): Promise<void> {
+    validatePasswordResetInput(input);
     const credential = this.usersById.get(input.userId);
     if (!credential) throw new SaasDomainError('USER_NOT_FOUND', 'User was not found.');
 

@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import type { SaasRepository, UserRegistrationInput } from '../repository';
+import { validatePasswordResetInput, validateUserRegistrationInput } from '../identityValidation';
+import type { PasswordResetInput, SaasRepository, UserRegistrationInput } from '../repository';
 import {
   BillingError,
   SaasDomainError,
+  type AccountStatus,
   type EntitlementSnapshot,
   type FeatureKey,
   type Membership,
@@ -38,6 +40,7 @@ export class PgSaasRepository implements SaasRepository {
   constructor(private readonly database: Database) {}
 
   async createUserWithOrganization(input: UserRegistrationInput): Promise<UserContext> {
+    validateUserRegistrationInput(input);
     const verifiedEmailRegistration = 'email' in input;
     const username = verifiedEmailRegistration ? normalizeEmail(input.email) : normalizeUsername(input.username);
     const email = verifiedEmailRegistration ? username : legacyEmail(username);
@@ -192,7 +195,7 @@ export class PgSaasRepository implements SaasRepository {
         username: asString(row.normalized_username),
         email: mappedEmail(row),
         displayName: mappedDisplayName(row),
-        accountStatus: row.account_status === 'disabled' ? 'disabled' : 'active',
+        accountStatus: asAccountStatus(row.account_status),
         platformRole: asPlatformRole(row.platform_role),
         createdAt: asIso(row.user_created_at),
       },
@@ -253,11 +256,8 @@ export class PgSaasRepository implements SaasRepository {
     );
   }
 
-  async resetPasswordAndRevokeSessions(input: {
-    userId: string;
-    passwordHash: string;
-    revokedAt: string;
-  }): Promise<void> {
+  async resetPasswordAndRevokeSessions(input: PasswordResetInput): Promise<void> {
+    validatePasswordResetInput(input);
     await this.transaction(async (client) => {
       const credential = await client.query<Row>(
         `/* reset-password */
@@ -643,7 +643,7 @@ function mapUser(row: Row): User {
     username: asString(row.normalized_username),
     email: mappedEmail(row),
     displayName: mappedDisplayName(row),
-    accountStatus: row.account_status === 'disabled' ? 'disabled' : 'active',
+    accountStatus: asAccountStatus(row.account_status),
     platformRole: asPlatformRole(row.platform_role),
     createdAt: asIso(row.created_at),
   };
@@ -704,6 +704,11 @@ function mapRefreshSession(row: Row): RefreshSession {
 
 function asPlatformRole(value: unknown): PlatformRole {
   return value === 'platform_admin' ? 'platform_admin' : 'user';
+}
+
+function asAccountStatus(value: unknown): AccountStatus {
+  if (value === 'active' || value === 'disabled') return value;
+  throw new Error('Invalid account status.');
 }
 
 function asMembershipRole(value: unknown): MembershipRole {
