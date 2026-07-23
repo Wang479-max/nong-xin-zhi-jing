@@ -67,6 +67,50 @@ describe('email verification configuration', () => {
     })).toThrow();
   });
 
+  it.each([
+    ['a non-numeric database', 'redis://localhost/not-a-db'],
+    ['a negative database', 'redis://localhost/-1'],
+    ['a fractional database', 'redis://localhost/1.5'],
+    ['no hostname', 'redis:///0'],
+    ['a query string', 'redis://localhost/0?timeout=10'],
+    ['a fragment', 'redis://localhost/0#primary'],
+  ])('rejects a Redis URL with %s', (_description, redisUrl) => {
+    expect(() => loadEmailConfig({
+      ...validEnvironment,
+      REDIS_URL: redisUrl,
+    })).toThrow();
+  });
+
+  it('rejects Redis credentials with malformed percent-encoding', () => {
+    expect(() => loadEmailConfig({
+      ...validEnvironment,
+      REDIS_URL: 'redis://user:%ZZ@localhost:6379',
+    })).toThrow();
+  });
+
+  it('accepts a rediss URL with safely encoded credentials and a database', () => {
+    const redisUrl = 'rediss://user:p%40ss@redis.example.com:6380/12';
+
+    expect(loadEmailConfig({
+      ...validEnvironment,
+      REDIS_URL: redisUrl,
+    }).redisUrl).toBe(redisUrl);
+  });
+
+  it('rejects a whitespace-only HMAC secret', () => {
+    expect(() => loadEmailConfig({
+      ...validEnvironment,
+      EMAIL_VERIFICATION_HMAC_SECRET: ' '.repeat(32),
+    })).toThrow();
+  });
+
+  it('rejects a whitespace-only SMTP password', () => {
+    expect(() => loadEmailConfig({
+      ...validEnvironment,
+      SMTP_PASS: '   ',
+    })).toThrow();
+  });
+
   it('rejects secure SMTP on port 587', () => {
     expect(() => loadEmailConfig({
       ...validEnvironment,

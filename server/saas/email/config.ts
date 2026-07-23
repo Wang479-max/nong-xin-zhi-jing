@@ -6,25 +6,51 @@ const EMAIL_HOURLY_LIMIT = 5;
 const IP_HOURLY_LIMIT = 20;
 const MAX_ATTEMPTS = 5;
 
-const redisUrlSchema = z.string()
-  .url('REDIS_URL must be a valid URL.')
-  .refine((value) => {
-    try {
-      return ['redis:', 'rediss:'].includes(new URL(value).protocol);
-    } catch {
+function isUsableRedisUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (
+      !['redis:', 'rediss:'].includes(url.protocol)
+      || !url.hostname
+      || url.search
+      || url.hash
+    ) {
       return false;
     }
-  }, 'REDIS_URL must use the redis:// or rediss:// scheme.');
+
+    decodeURIComponent(url.username);
+    decodeURIComponent(url.password);
+
+    if (url.pathname === '' || url.pathname === '/') {
+      return true;
+    }
+
+    if (!/^\/\d+$/.test(url.pathname)) {
+      return false;
+    }
+
+    return Number.isSafeInteger(Number(url.pathname.slice(1)));
+  } catch {
+    return false;
+  }
+}
+
+const redisUrlSchema = z.string()
+  .url('REDIS_URL must be a valid URL.')
+  .refine(isUsableRedisUrl, 'REDIS_URL is not usable by the Redis client.');
 
 const emailConfigSchema = z.object({
   redisUrl: redisUrlSchema,
-  hmacSecret: z.string().min(32, 'EMAIL_VERIFICATION_HMAC_SECRET must be at least 32 characters long.'),
+  hmacSecret: z.string().refine(
+    (value) => value.trim().length >= 32,
+    'EMAIL_VERIFICATION_HMAC_SECRET must be at least 32 characters after trimming.',
+  ),
   smtp: z.object({
     host: z.string().trim().min(1, 'SMTP_HOST is required.'),
     port: z.union([z.literal(465), z.literal(587)]),
     secure: z.boolean(),
     user: z.string().trim().email('SMTP_USER must be a valid email address.'),
-    pass: z.string().min(1, 'SMTP_PASS is required.'),
+    pass: z.string().refine((value) => value.trim().length > 0, 'SMTP_PASS is required.'),
     fromName: z.string().trim().min(1, 'SMTP_FROM_NAME is required.').max(64),
   }).strict(),
   codeTtlSeconds: z.literal(CODE_TTL_SECONDS),
