@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  User, 
+  Mail,
+  KeyRound,
   Lock, 
   Shield,
   ArrowRight,
@@ -23,6 +24,8 @@ import appIcon from '../assets/brand/app-icon-512.png';
 interface AuthProps {
   onLogin: (session: SaasSession, mode?: 'data' | '3d') => void;
 }
+
+type AuthMode = 'login' | 'register' | 'reset';
 
 const ParticleLayer1 = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -81,13 +84,25 @@ const ParticleLayer3 = () => (
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const { t } = useTranslation();
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [entryMode, setEntryMode] = useState<'data' | '3d'>('3d');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
   const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setResendSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
 
   const getPasswordStrength = (pass: string) => {
     if (!pass) return 0;
@@ -101,6 +116,59 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   };
 
   const passwordStrength = getPasswordStrength(password);
+  const emailIsValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
+  const switchMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setPassword('');
+    setVerificationCode('');
+    setError('');
+    setStatus('');
+    setShowPassword(false);
+    setResendSeconds(0);
+  };
+
+  const friendlyError = (value: unknown): string => {
+    if (!(value instanceof SaasApiError)) {
+      return value instanceof Error ? value.message : t('auth.errorNetwork');
+    }
+    const messages: Record<string, string> = {
+      INVALID_EMAIL: '请输入有效的邮箱地址。',
+      INVALID_CODE: '验证码不正确，请重新输入。',
+      CODE_EXPIRED: '验证码已过期，请重新获取。',
+      CODE_LOCKED: '验证码错误次数过多，请重新获取。',
+      TOO_MANY_REQUESTS: '操作过于频繁，请稍后再试。',
+      EMAIL_DELIVERY_UNAVAILABLE: '邮件暂时无法发送，请稍后再试。',
+      VERIFICATION_UNAVAILABLE: '验证码服务暂时不可用，请稍后再试。',
+      EMAIL_TAKEN: '该邮箱已注册，请直接登录。',
+      INVALID_CREDENTIALS: '邮箱或密码不正确。',
+      ACCOUNT_DISABLED: '该账号已停用，请联系管理员。',
+      VALIDATION_ERROR: '请检查邮箱、密码和验证码。',
+    };
+    return messages[value.code] ?? '操作失败，请稍后重试。';
+  };
+
+  const handleSendCode = async () => {
+    setError('');
+    setStatus('');
+    if (!emailIsValid(email)) {
+      setError('请输入有效的邮箱地址。');
+      return;
+    }
+    setIsSendingCode(true);
+    try {
+      const result = await saasClient.sendEmailCode({
+        email: email.trim(),
+        purpose: mode === 'reset' ? 'reset_password' : 'register',
+      });
+      setResendSeconds(result.retryAfterSeconds);
+      setStatus(`验证码已发送，${result.expiresInSeconds / 60} 分钟内有效。`);
+    } catch (value) {
+      setError(friendlyError(value));
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,31 +176,58 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      if (!username || !password) {
-        setError(t('auth.errorEmpty'));
-        setIsLoading(false);
+      const normalizedEmail = email.trim();
+      if (!emailIsValid(normalizedEmail)) {
+        setError('请输入有效的邮箱地址。');
         return;
       }
-      if (!isLogin && getPasswordStrength(password) < 100) {
+      if (!password) {
+        setError(t('auth.errorEmpty'));
+        return;
+      }
+      if (mode !== 'login' && getPasswordStrength(password) < 100) {
         setError('密码至少 12 位，并须包含小写字母、大写字母、数字和符号。');
         return;
       }
-      const session = isLogin
-        ? await saasClient.login({ email: username, password })
-        : await saasClient.register({ email: username, password, verificationCode: '' });
-      onLogin(session, entryMode);
-    } catch (err) {
-      setError(err instanceof SaasApiError ? `${err.message}（${err.code}）` : err instanceof Error ? err.message : t('auth.errorNetwork'));
+      if (mode !== 'login' && !/^\d{6}$/.test(verificationCode)) {
+        setError('请输入 6 位邮箱验证码。');
+        return;
+      }
+      if (mode === 'login') {
+        const session = await saasClient.login({ email: normalizedEmail, password });
+        onLogin(session, entryMode);
+      } else if (mode === 'register') {
+        const session = await saasClient.register({
+          email: normalizedEmail,
+          password,
+          verificationCode,
+        });
+        onLogin(session, entryMode);
+      } else {
+        await saasClient.resetPassword({
+          email: normalizedEmail,
+          password,
+          verificationCode,
+        });
+        setMode('login');
+        setPassword('');
+        setVerificationCode('');
+        setError('');
+        setStatus('密码已重置，请使用新密码登录。');
+        setResendSeconds(0);
+      }
+    } catch (value) {
+      setError(friendlyError(value));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleAdminPrefill = () => {
-    setUsername('admin');
+    switchMode('login');
+    setEmail('');
     setPassword('');
-    setIsLogin(true);
-    setError('请输入部署时配置的管理员密码。');
+    setError('请使用部署时配置的管理员邮箱登录。');
   };
 
   const titleChars = ["农", "芯", "智", "境"];
@@ -395,7 +490,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   className="absolute inset-y-1 rounded-xl bg-white/5 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
                   style={{ 
                     width: 'calc(50% - 4px)',
-                    left: isLogin ? '4px' : 'calc(50%)'
+                    left: mode === 'register' ? 'calc(50%)' : '4px'
                   }}
                   transition={{ type: "spring", bounce: 0.12, duration: 0.45 }}
                 >
@@ -403,20 +498,22 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </motion.div>
                 <button
                   type="button"
-                  onClick={() => { setIsLogin(true); setError(''); }}
+                  aria-label="切换到登录"
+                  onClick={() => switchMode('login')}
                   className={cn(
                     "flex-1 py-2.5 text-[11px] uppercase tracking-widest rounded-xl transition-all duration-300 relative z-10 select-none font-black",
-                    isLogin ? "text-white" : "text-slate-400 hover:text-slate-200"
+                    mode === 'login' ? "text-white" : "text-slate-400 hover:text-slate-200"
                   )}
                 >
                   {t('auth.loginTab')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setIsLogin(false); setError(''); }}
+                  aria-label="切换到注册"
+                  onClick={() => switchMode('register')}
                   className={cn(
                     "flex-1 py-2.5 text-[11px] uppercase tracking-widest rounded-xl transition-all duration-300 relative z-10 select-none font-black",
-                    !isLogin ? "text-white" : "text-slate-400 hover:text-slate-200"
+                    mode === 'register' ? "text-white" : "text-slate-400 hover:text-slate-200"
                   )}
                 >
                   {t('auth.registerTab')}
@@ -426,7 +523,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               {/* Login core form */}
               <AnimatePresence mode="wait">
                 <motion.form 
-                  key={isLogin ? 'login' : 'register'}
+                  key={mode}
+                  aria-label="邮箱账号表单"
                   initial={{ opacity: 0, x: 15 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -15 }}
@@ -436,6 +534,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 >
                   {error && (
                     <motion.div 
+                      role="alert"
                       initial={{ opacity: 0, y: -8 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="p-3 bg-red-950/50 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-xs font-bold backdrop-blur-md"
@@ -445,21 +544,34 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     </motion.div>
                   )}
 
-                  {/* Username Field */}
+                  {status && (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className="p-3 bg-emerald-950/40 border border-emerald-500/20 rounded-xl text-emerald-300 text-xs font-bold"
+                    >
+                      {status}
+                    </div>
+                  )}
+
+                  {/* Email Field */}
                   <div className="relative group/input">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-20">
-                      <User size={16} className="text-slate-500 group-focus-within/input:text-emerald-400 transition-colors duration-300" />
+                      <Mail size={16} className="text-slate-500 group-focus-within/input:text-emerald-400 transition-colors duration-300" />
                     </div>
                     <input
-                      type="text"
+                      type="email"
+                      aria-label="邮箱"
+                      autoComplete="email"
+                      inputMode="email"
                       required
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       className="w-full bg-[#020503]/50 border border-white/5 rounded-2xl py-3.5 pl-11 pr-4 text-white text-sm font-semibold focus:outline-none focus:border-emerald-500/40 focus:bg-[#020503]/85 transition-all duration-300 placeholder:text-transparent peer shadow-[inset_0_2px_10px_rgba(0,0,0,0.4)]"
-                      placeholder="用户名"
+                      placeholder="请输入邮箱"
                     />
                     <label className="absolute left-10 top-3.5 text-slate-500 font-semibold text-xs pointer-events-none transition-all duration-300 peer-focus:-top-2.5 peer-focus:left-3 peer-focus:text-[9px] peer-focus:text-emerald-400 peer-focus:bg-[#061810] peer-focus:px-2 peer-focus:rounded peer-[:not(:placeholder-shown)]:-top-2.5 peer-[:not(:placeholder-shown)]:left-3 peer-[:not(:placeholder-shown)]:text-[9px] peer-[:not(:placeholder-shown)]:text-emerald-400 peer-[:not(:placeholder-shown)]:bg-[#061810] peer-[:not(:placeholder-shown)]:px-2 peer-[:not(:placeholder-shown)]:rounded z-30">
-                      {t('auth.usernameLabel')}
+                      邮箱
                     </label>
                   </div>
 
@@ -470,6 +582,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     </div>
                     <input
                       type={showPassword ? "text" : "password"}
+                      aria-label="密码"
+                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -481,6 +595,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     </label>
                     <button
                       type="button"
+                      aria-label={showPassword ? '隐藏密码' : '显示密码'}
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-500 hover:text-emerald-400 transition-colors z-20 duration-300"
                     >
@@ -488,7 +603,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     </button>
                     
                     {/* Password Level Bar */}
-                    {!isLogin && password && (
+                    {mode !== 'login' && password && (
                       <div className="absolute -bottom-3 left-1 right-1 flex gap-1 h-0.5">
                         {[20, 40, 60, 80, 100].map((level) => (
                           <div 
@@ -505,7 +620,74 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     )}
                   </div>
 
-                  {!isLogin && <p className="px-1 text-[10px] leading-relaxed text-slate-400">密码要求：至少 12 位，包含小写字母、大写字母、数字和符号。</p>}
+                  {mode !== 'login' && (
+                    <p className="px-1 text-[10px] leading-relaxed text-slate-400">
+                      密码要求：至少 12 位，包含小写字母、大写字母、数字和符号。
+                    </p>
+                  )}
+
+                  {mode !== 'login' && (
+                    <div className="flex gap-2">
+                      <div className="relative flex-1 group/input">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-20">
+                          <KeyRound size={16} className="text-slate-500 group-focus-within/input:text-emerald-400 transition-colors duration-300" />
+                        </div>
+                        <input
+                          type="text"
+                          aria-label="验证码"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          maxLength={6}
+                          required
+                          value={verificationCode}
+                          onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                          className="w-full bg-[#020503]/50 border border-white/5 rounded-2xl py-3.5 pl-11 pr-4 text-white text-sm font-semibold tracking-[0.3em] focus:outline-none focus:border-emerald-500/40 focus:bg-[#020503]/85 transition-all duration-300 placeholder:text-slate-600 shadow-[inset_0_2px_10px_rgba(0,0,0,0.4)]"
+                          placeholder="6位验证码"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={resendSeconds > 0 ? `${resendSeconds} 秒后重发` : '发送验证码'}
+                        disabled={isSendingCode || resendSeconds > 0}
+                        onClick={() => void handleSendCode()}
+                        className="min-w-[116px] rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-3 text-[11px] font-black tracking-wide text-emerald-300 transition-all hover:border-emerald-400/50 hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-white/5 disabled:text-slate-500"
+                      >
+                        {isSendingCode ? (
+                          <Loader2 size={15} className="mx-auto animate-spin" />
+                        ) : resendSeconds > 0 ? (
+                          `${resendSeconds} 秒后重发`
+                        ) : (
+                          '发送验证码'
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {mode === 'login' && (
+                    <div className="flex justify-end px-1">
+                      <button
+                        type="button"
+                        aria-label="忘记密码"
+                        onClick={() => switchMode('reset')}
+                        className="text-[11px] font-bold text-slate-400 transition-colors hover:text-emerald-400"
+                      >
+                        忘记密码？
+                      </button>
+                    </div>
+                  )}
+
+                  {mode === 'reset' && (
+                    <div className="flex justify-end px-1">
+                      <button
+                        type="button"
+                        aria-label="返回登录"
+                        onClick={() => switchMode('login')}
+                        className="text-[11px] font-bold text-slate-400 transition-colors hover:text-emerald-400"
+                      >
+                        返回登录
+                      </button>
+                    </div>
+                  )}
 
                   {/* Action Button */}
                   <div className="pt-4">
@@ -529,7 +711,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                           </>
                         ) : (
                           <>
-                            <span>{isLogin ? t('auth.loginBtn') : t('auth.registerBtn')}</span>
+                            <span>
+                              {mode === 'login'
+                                ? t('auth.loginBtn')
+                                : mode === 'register'
+                                  ? t('auth.registerBtn')
+                                  : '重置密码'}
+                            </span>
                             <ArrowRight size={16} className="group-hover/btn:translate-x-1 transition-transform duration-300" />
                           </>
                         )}
@@ -549,12 +737,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             className="mt-6 w-full max-w-[420px]"
           >
             <button
+              type="button"
+              aria-label="管理员登录提示"
               onClick={handleAdminPrefill}
               disabled={isLoading}
               className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-emerald-500/30 text-slate-400 hover:text-emerald-400 font-bold text-xs tracking-widest transition-all duration-300 group"
             >
               <Sparkles size={14} className="group-hover:text-amber-400 transition-colors" />
-              填入管理员账号（密码由部署方提供）
+              管理员账号登录（请使用部署邮箱）
             </button>
           </motion.div>
 

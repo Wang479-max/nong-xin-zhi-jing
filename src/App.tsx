@@ -407,7 +407,7 @@ const StatusBar = ({ user }: { user: any }) => {
       <div className="flex items-center gap-2 sm:gap-4 flex-wrap justify-center">
         <div className="flex items-center gap-1.5">
           <User size={10} />
-          <span className="uppercase tracking-widest">{t('app.currentUser')}: {user?.username || '管理员'} ({user?.role || '高级专家'})</span>
+          <span className="uppercase tracking-widest">{t('app.currentUser')}: {user?.displayName || '管理员'} ({user?.role || '高级专家'})</span>
         </div>
         <div className="w-px h-3 bg-slate-200/50 dark:bg-white/5" />
         <div className="flex items-center gap-1.5">
@@ -1452,7 +1452,7 @@ function AppContent() {
                 onClick={() => setIsSettingsOpen(true)}
               >
                 <div className="text-right hidden sm:block">
-                  <p className="text-sm font-black text-slate-900 dark:text-white group-hover:text-forest-green transition-colors">{user?.username || '管理员'}</p>
+                  <p className="text-sm font-black text-slate-900 dark:text-white group-hover:text-forest-green transition-colors">{user?.displayName || '管理员'}</p>
                   <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">{user?.role || '高级专家'}</p>
                 </div>
                 <div className="w-10 h-10 bg-slate-100/50 dark:bg-[#1A1A1A]/50 backdrop-blur-md rounded-2xl overflow-hidden border border-slate-200/50 dark:border-white/10 group-hover:border-forest-green/50 transition-all flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:text-forest-green group-hover:shadow-lg group-hover:shadow-forest-green/10">
