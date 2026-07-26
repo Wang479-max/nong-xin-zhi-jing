@@ -3,7 +3,15 @@ import { MODULE_DEFINITIONS, canAccessAction, canAccessModule, visibleModules } 
 import type { EntitlementSnapshot, SaasUser } from '../../src/types/saas';
 import { isCurrentEntitlementResponse } from '../../src/hooks/usePlanGate';
 
-const user: SaasUser = { id: 'u1', username: 'farmer', platformRole: 'user', createdAt: '2030-01-01T00:00:00.000Z' };
+const user: SaasUser = {
+  id: 'u1',
+  username: 'farmer@example.com',
+  email: 'farmer@example.com',
+  displayName: 'farmer',
+  accountStatus: 'active',
+  platformRole: 'user',
+  createdAt: '2030-01-01T00:00:00.000Z',
+};
 const free: EntitlementSnapshot = {
   organizationId: 'o1', productId: 'free', plan: 'free', status: 'active',
   features: ['monitoring.basic'], limits: { plots: 2 },

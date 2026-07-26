@@ -1135,7 +1135,7 @@ const DataService = {
    * 用户登录
    */
   login: async (payload: any) => {
-    const session = await saasClient.login({ username: payload.username, password: payload.password });
+    const session = await saasClient.login({ email: payload.email ?? payload.username, password: payload.password });
     return { ok: true, data: session };
   },
 
@@ -1143,7 +1143,11 @@ const DataService = {
    * 用户注册
    */
   register: async (payload: any) => {
-    const session = await saasClient.register({ username: payload.username, password: payload.password });
+    const session = await saasClient.register({
+      email: payload.email ?? payload.username,
+      password: payload.password,
+      verificationCode: payload.verificationCode,
+    });
     return { ok: true, data: session };
   },
 

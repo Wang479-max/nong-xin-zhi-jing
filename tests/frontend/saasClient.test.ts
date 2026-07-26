@@ -6,7 +6,15 @@ const sessionPayload = (accessToken = 'access-one') => ({
   data: {
     accessToken,
     refreshToken: 'must-never-escape',
-    user: { id: 'user-1', username: 'farmer', platformRole: 'user', createdAt: '2030-01-01T00:00:00.000Z' },
+    user: {
+      id: 'user-1',
+      username: 'farmer@example.com',
+      email: 'farmer@example.com',
+      displayName: 'farmer',
+      accountStatus: 'active',
+      platformRole: 'user',
+      createdAt: '2030-01-01T00:00:00.000Z',
+    },
     organization: { id: 'org-1', name: 'Farm', createdAt: '2030-01-01T00:00:00.000Z' },
     membership: { id: 'member-1', userId: 'user-1', organizationId: 'org-1', role: 'owner', createdAt: '2030-01-01T00:00:00.000Z' },
     entitlement: { organizationId: 'org-1', productId: 'free', plan: 'free', status: 'active', features: ['monitoring.basic'], limits: { plots: 2 } },
@@ -28,7 +36,7 @@ describe('SaaS browser client', () => {
     const fetcher = vi.fn(async () => json(sessionPayload()));
     const client = createSaasClient(fetcher, 'https://farm.example');
 
-    const session = await client.login({ username: 'farmer', password: 'StrongPassword#123' });
+    const session = await client.login({ email: 'farmer@example.com', password: 'StrongPassword#123' });
 
     expect(session).not.toHaveProperty('accessToken');
     expect(session).not.toHaveProperty('refreshToken');
@@ -38,14 +46,56 @@ describe('SaaS browser client', () => {
     if (previous) Object.defineProperty(globalThis, 'localStorage', previous); else delete (globalThis as { localStorage?: unknown }).localStorage;
   });
 
-  it('registers with username and password only', async () => {
+  it('registers with email, password and verification code', async () => {
     const fetcher = vi.fn(async () => json(sessionPayload()));
     const client = createSaasClient(fetcher, 'https://farm.example');
 
-    await client.register({ username: 'farmer', password: 'StrongPassword#123' });
+    await client.register({
+      email: 'farmer@example.com',
+      password: 'StrongPassword#123',
+      verificationCode: '123456',
+    });
 
     const init = (fetcher.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit])[1];
-    expect(JSON.parse(String(init.body))).toEqual({ username: 'farmer', password: 'StrongPassword#123' });
+    expect(JSON.parse(String(init.body))).toEqual({
+      email: 'farmer@example.com',
+      password: 'StrongPassword#123',
+      verificationCode: '123456',
+    });
+  });
+
+  it('sends email codes and resets passwords with exact request bodies', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(json({
+        success: true,
+        data: { accepted: true, retryAfterSeconds: 60, expiresInSeconds: 300 },
+      }, 202))
+      .mockResolvedValueOnce(json({ success: true, data: { reset: true } }));
+    const client = createSaasClient(fetcher, 'https://farm.example');
+
+    await expect(client.sendEmailCode({
+      email: 'farmer@example.com',
+      purpose: 'register',
+    })).resolves.toEqual({ accepted: true, retryAfterSeconds: 60, expiresInSeconds: 300 });
+    await expect(client.resetPassword({
+      email: 'farmer@example.com',
+      password: 'NewStrongPassword#456',
+      verificationCode: '654321',
+    })).resolves.toBeUndefined();
+
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/auth/email-code',
+      '/api/v1/auth/password-reset',
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({
+      email: 'farmer@example.com',
+      purpose: 'register',
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual({
+      email: 'farmer@example.com',
+      password: 'NewStrongPassword#456',
+      verificationCode: '654321',
+    });
   });
 
   it('restores through the cookie refresh endpoint and logout always clears memory', async () => {
@@ -55,7 +105,7 @@ describe('SaaS browser client', () => {
     const client = createSaasClient(fetcher, 'https://farm.example');
 
     const restored = await client.restoreSession();
-    expect(restored.user.username).toBe('farmer');
+    expect(restored.user.email).toBe('farmer@example.com');
     expect(fetcher.mock.calls[0]).toEqual(['/api/v1/auth/refresh', expect.objectContaining({ method: 'POST', credentials: 'include' })]);
     await client.logout();
     expect(client.hasAccessToken()).toBe(false);
@@ -66,7 +116,7 @@ describe('SaaS browser client', () => {
       ? json(sessionPayload())
       : json({ success: true, data: {} }));
     const client = createSaasClient(fetcher, 'https://farm.example');
-    await client.login({ username: 'farmer', password: 'x' });
+    await client.login({ email: 'farmer@example.com', password: 'x' });
     fetcher.mockClear();
 
     await client.fetchWithSession('/api/plots');
@@ -106,7 +156,7 @@ describe('SaaS browser client', () => {
       return json({ success: true, data: { ok: true } });
     });
     const client = createSaasClient(fetcher, 'https://farm.example');
-    await client.login({ username: 'farmer', password: 'x' });
+    await client.login({ email: 'farmer@example.com', password: 'x' });
 
     await Promise.all([client.fetchWithSession('/api/plots'), client.fetchWithSession('/api/devices')]);
 
@@ -124,7 +174,7 @@ describe('SaaS browser client', () => {
         ? json({ success: false, error: { code: 'INVALID_REFRESH_TOKEN', message: 'expired' } }, 401)
         : json({ success: false, error: { code: 'INVALID_ACCESS_TOKEN', message: 'expired' } }, 401));
     const client = createSaasClient(fetcher, 'https://farm.example', target);
-    await client.login({ username: 'farmer', password: 'x' });
+    await client.login({ email: 'farmer@example.com', password: 'x' });
 
     await expect(client.me()).rejects.toBeInstanceOf(SaasApiError);
     expect(client.hasAccessToken()).toBe(false);
@@ -149,7 +199,7 @@ describe('SaaS browser client', () => {
       return json({ success: false, error: { code: 'INVALID_ACCESS_TOKEN', message: 'expired' } }, 401);
     });
     const client = createSaasClient(fetcher, 'https://farm.example');
-    await client.login({ username: 'farmer', password: 'x' });
+    await client.login({ email: 'farmer@example.com', password: 'x' });
     const protectedCall = client.fetchWithSession('/api/plots');
     await refreshStarted;
 
@@ -178,7 +228,7 @@ describe('SaaS browser client', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     const client = createSaasClient(fetcher, 'https://farm.example');
-    await client.login({ username: 'farmer', password: 'x' });
+    await client.login({ email: 'farmer@example.com', password: 'x' });
 
     const delayedMe = client.me();
     await meStarted;
@@ -196,7 +246,13 @@ describe('SaaS browser client', () => {
     let resolveMe!: (response: Response) => void;
     let loginCount = 0;
     const secondAccount = sessionPayload('second-token');
-    secondAccount.data.user = { ...secondAccount.data.user, id: 'user-2', username: 'grower' };
+    secondAccount.data.user = {
+      ...secondAccount.data.user,
+      id: 'user-2',
+      username: 'grower@example.com',
+      email: 'grower@example.com',
+      displayName: 'grower',
+    };
     secondAccount.data.membership = { ...secondAccount.data.membership, id: 'member-2', userId: 'user-2' };
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -208,14 +264,29 @@ describe('SaaS browser client', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     const client = createSaasClient(fetcher, 'https://farm.example');
-    await client.login({ username: 'farmer', password: 'x' });
+    await client.login({ email: 'farmer@example.com', password: 'x' });
 
     const delayedMe = client.me();
     await meStarted;
-    await client.login({ username: 'grower', password: 'x' });
+    await client.login({ email: 'grower@example.com', password: 'x' });
     resolveMe(json(sessionPayload('old-me-token')));
 
     await expect(delayedMe).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
-    expect(client.currentSession()?.user.username).toBe('grower');
+    expect(client.currentSession()?.user.displayName).toBe('grower');
+  });
+
+  it.each([
+    ['email', undefined],
+    ['displayName', undefined],
+    ['accountStatus', 'pending'],
+  ])('rejects a malformed session user field %s', async (field, value) => {
+    const payload = sessionPayload();
+    payload.data.user = { ...payload.data.user, [field]: value };
+    const client = createSaasClient(vi.fn(async () => json(payload)), 'https://farm.example');
+
+    await expect(client.login({
+      email: 'farmer@example.com',
+      password: 'StrongPassword#123',
+    })).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   });
 });

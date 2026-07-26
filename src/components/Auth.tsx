@@ -118,8 +118,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         return;
       }
       const session = isLogin
-        ? await saasClient.login({ username, password })
-        : await saasClient.register({ username, password });
+        ? await saasClient.login({ email: username, password })
+        : await saasClient.register({ email: username, password, verificationCode: '' });
       onLogin(session, entryMode);
     } catch (err) {
       setError(err instanceof SaasApiError ? `${err.message}（${err.code}）` : err instanceof Error ? err.message : t('auth.errorNetwork'));

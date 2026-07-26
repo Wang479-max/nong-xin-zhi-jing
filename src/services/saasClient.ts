@@ -22,6 +22,13 @@ export class SaasApiError extends Error {
 }
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type VerificationPurpose = 'register' | 'reset_password';
+
+export interface EmailCodeAccepted {
+  accepted: true;
+  retryAfterSeconds: number;
+  expiresInSeconds: number;
+}
 
 export function createSaasClient(
   fetcher: Fetcher = globalThis.fetch.bind(globalThis),
@@ -121,7 +128,22 @@ export function createSaasClient(
 
   const api = async <T>(path: string, init?: RequestInit): Promise<T> => readEnvelope(await withSession(`${API_ROOT}${path}`, init)) as Promise<T>;
 
-  const beginAuthSession = (path: '/auth/login' | '/auth/register', input: { username: string; password: string }) => {
+  const postPublic = async (path: string, body: unknown): Promise<unknown> => readEnvelope(await fetcher(
+    `${API_ROOT}${path}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  ));
+
+  const beginAuthSession = (
+    path: '/auth/login' | '/auth/register',
+    input:
+      | { email: string; password: string }
+      | { email: string; password: string; verificationCode: string },
+  ) => {
     authGeneration += 1;
     refreshController?.abort();
     clearSession();
@@ -136,8 +158,18 @@ export function createSaasClient(
       refreshController?.abort();
       clearSession();
     },
-    login: (input: { username: string; password: string }) => beginAuthSession('/auth/login', input),
-    register: (input: { username: string; password: string }) => beginAuthSession('/auth/register', input),
+    sendEmailCode: async (input: { email: string; purpose: VerificationPurpose }) =>
+      parseEmailCodeAccepted(await postPublic('/auth/email-code', input)),
+    login: (input: { email: string; password: string }) => beginAuthSession('/auth/login', input),
+    register: (input: { email: string; password: string; verificationCode: string }) =>
+      beginAuthSession('/auth/register', input),
+    resetPassword: async (input: { email: string; password: string; verificationCode: string }) => {
+      const result = await postPublic('/auth/password-reset', input);
+      if (!isRecord(result) || result.reset !== true) invalidResponse();
+      authGeneration += 1;
+      refreshController?.abort();
+      clearSession();
+    },
     restoreSession: () => refresh(false),
     logout: async () => {
       authGeneration += 1;
@@ -177,8 +209,21 @@ function parseContext(value: unknown): SaasSession {
   const platformRole = user.platformRole === 'platform_admin' ? 'platform_admin' : user.platformRole === 'user' ? 'user' : invalidResponse();
   const membershipRoles = new Set(['owner', 'admin', 'expert', 'operator', 'viewer']);
   if (!membershipRoles.has(String(membership.role))) invalidResponse();
+  const accountStatus = user.accountStatus === 'active'
+    ? 'active'
+    : user.accountStatus === 'disabled'
+      ? 'disabled'
+      : invalidResponse();
   return {
-    user: { id: string(user.id), username: string(user.username), platformRole, createdAt: string(user.createdAt) },
+    user: {
+      id: string(user.id),
+      username: string(user.username),
+      email: email(user.email),
+      displayName: nonEmptyString(user.displayName),
+      accountStatus,
+      platformRole,
+      createdAt: string(user.createdAt),
+    },
     organization: { id: string(organization.id), name: string(organization.name), createdAt: string(organization.createdAt) },
     membership: {
       id: string(membership.id), userId: string(membership.userId), organizationId: string(membership.organizationId),
@@ -221,6 +266,26 @@ function parseOrder(value: unknown): Order {
 function parseSettlement(value: unknown): OrderSettlement {
   if (!isRecord(value)) invalidResponse();
   return { order: parseOrder(value.order), entitlement: parseEntitlement(value.entitlement) };
+}
+function parseEmailCodeAccepted(value: unknown): EmailCodeAccepted {
+  if (!isRecord(value) || value.accepted !== true) invalidResponse();
+  const retryAfterSeconds = number(value.retryAfterSeconds);
+  const expiresInSeconds = number(value.expiresInSeconds);
+  if (!Number.isInteger(retryAfterSeconds) || retryAfterSeconds < 0
+    || !Number.isInteger(expiresInSeconds) || expiresInSeconds <= 0) {
+    invalidResponse();
+  }
+  return { accepted: true, retryAfterSeconds, expiresInSeconds };
+}
+function nonEmptyString(value: unknown): string {
+  const parsed = string(value);
+  if (parsed.trim().length === 0) invalidResponse();
+  return parsed;
+}
+function email(value: unknown): string {
+  const parsed = nonEmptyString(value);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsed)) invalidResponse();
+  return parsed;
 }
 function parseArray<T>(value: unknown, parse: (item: unknown) => T): T[] { if (!Array.isArray(value)) invalidResponse(); return value.map(parse); }
 

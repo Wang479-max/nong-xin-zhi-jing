@@ -1,4 +1,5 @@
 export type PlatformRole = 'platform_admin' | 'user';
+export type AccountStatus = 'active' | 'disabled';
 export type MembershipRole = 'owner' | 'admin' | 'expert' | 'operator' | 'viewer';
 export type FeatureKey =
   | 'monitoring.basic'
@@ -10,7 +11,15 @@ export type FeatureKey =
   | 'team.members'
   | 'deployment.private';
 
-export interface SaasUser { id: string; username: string; platformRole: PlatformRole; createdAt: string }
+export interface SaasUser {
+  id: string;
+  username: string;
+  email: string;
+  displayName: string;
+  accountStatus: AccountStatus;
+  platformRole: PlatformRole;
+  createdAt: string;
+}
 export interface Organization { id: string; name: string; createdAt: string }
 export interface Membership {
   id: string; userId: string; organizationId: string; role: MembershipRole; createdAt: string;
