@@ -1,12 +1,26 @@
 import { randomBytes } from 'node:crypto';
 import type { Router } from 'express';
 import type { Pool } from 'pg';
+import { createClient } from 'redis';
 import { bootstrapPlatformAdmin } from './admin/bootstrap';
 import { AuthService } from './auth/service';
 import { BillingService, type BillingConfig } from './billing/service';
 import { createAuthConfig } from './config';
 import { createDatabasePool, loadDatabaseConfig, type DatabaseConfig } from './db/pool';
 import { PgSaasRepository } from './db/pgRepository';
+import { loadEmailConfig, type EmailConfig } from './email/config';
+import {
+  MailDeliveryError,
+  createSmtpVerificationMailer,
+  type VerificationMailer,
+} from './email/mailer';
+import { MemoryVerificationCodeStore } from './email/memoryVerificationStore';
+import {
+  RedisVerificationCodeStore,
+  type RedisEvalClient,
+} from './email/redisVerificationStore';
+import { EmailVerificationService } from './email/service';
+import type { VerificationCodeStore, VerificationStoreConfig } from './email/types';
 import { EntitlementService } from './entitlements/service';
 import { MemorySaasRepository } from './memoryRepository';
 import type { SaasRepository } from './repository';
@@ -15,6 +29,8 @@ import { createSaasRouter } from './router';
 export interface SaasRuntime {
   repository: SaasRepository;
   authService: AuthService;
+  verificationService: EmailVerificationService;
+  verificationStore: VerificationCodeStore;
   entitlementService: EntitlementService;
   billingService: BillingService;
   router: Router;
@@ -29,14 +45,30 @@ interface OwnedDatabasePool {
 
 export interface SaasRuntimeDependencies {
   createPool?: (config: DatabaseConfig) => OwnedDatabasePool;
+  createRedisClient?: (url: string) => RedisRuntimeClient;
+  verificationStore?: VerificationCodeStore;
+  verificationMailer?: VerificationMailer;
 }
 
 const DATABASE_READINESS_TIMEOUT_MS = 5_000;
+const RESERVATION_TTL_SECONDS = 30;
+
+interface RedisRuntimeClient extends RedisEvalClient {
+  connect(): Promise<unknown>;
+  on?(event: 'error', listener: () => void): unknown;
+}
 
 class DatabaseReadinessError extends Error {
   constructor() {
     super('Database readiness check failed.');
     this.name = 'DatabaseReadinessError';
+  }
+}
+
+class RedisVerificationReadinessError extends Error {
+  constructor() {
+    super('Redis verification readiness check failed.');
+    this.name = 'RedisVerificationReadinessError';
   }
 }
 
@@ -85,8 +117,46 @@ export async function createSaasRuntimeFromEnv(
     repository = new MemorySaasRepository();
   }
 
+  let verificationStore: VerificationCodeStore | undefined;
+  let runtimeClosed = false;
+  const closeRuntimeResources = async (): Promise<void> => {
+    if (runtimeClosed) return;
+    runtimeClosed = true;
+    let shutdownError: unknown;
+    try {
+      await verificationStore?.close();
+    } catch (error) {
+      shutdownError = error;
+    }
+    try {
+      await closePool();
+    } catch (error) {
+      shutdownError ??= error;
+    }
+    if (shutdownError) throw shutdownError;
+  };
+
   try {
     if (pool) await assertDatabaseReady(pool);
+
+    const emailConfig = loadRuntimeEmailConfig(environment, production);
+    verificationStore = dependencies.verificationStore
+      ?? await createRuntimeVerificationStore(emailConfig, dependencies);
+    const verificationMailer = dependencies.verificationMailer
+      ?? (emailConfig
+        ? createSmtpVerificationMailer({
+          ...emailConfig.smtp,
+          port: emailConfig.smtp.port as 465 | 587,
+        })
+        : unavailableVerificationMailer);
+    const verificationSettings = emailConfig ?? developmentEmailSettings();
+    const verificationService = new EmailVerificationService({
+      store: verificationStore,
+      mailer: verificationMailer,
+      hmacSecret: verificationSettings.hmacSecret,
+      codeTtlSeconds: verificationSettings.codeTtlSeconds,
+      resendCooldownSeconds: verificationSettings.resendCooldownSeconds,
+    });
 
     if (environment.ADMIN_EMAIL !== undefined && environment.ADMIN_PASSWORD !== undefined) {
       await bootstrapPlatformAdmin(repository, {
@@ -96,7 +166,7 @@ export async function createSaasRuntimeFromEnv(
       });
     }
 
-    const authService = new AuthService(repository, authConfig);
+    const authService = new AuthService(repository, authConfig, verificationService);
     const entitlementService = new EntitlementService(repository);
     const billingService = new BillingService(repository, { paymentMode });
     const router = createSaasRouter({
@@ -104,27 +174,107 @@ export async function createSaasRuntimeFromEnv(
       authService,
       entitlementService,
       billingService,
+      verificationService,
       refreshTokenTtlSeconds: authConfig.refreshTokenTtlSeconds,
       secureCookies,
     });
     return {
       repository,
       authService,
+      verificationService,
+      verificationStore,
       entitlementService,
       billingService,
       router,
       paymentMode,
-      close: closePool,
+      close: closeRuntimeResources,
     };
   } catch (error) {
     try {
-      await closePool();
+      await closeRuntimeResources();
     } catch {
-      // Preserve the sanitized startup error rather than leaking pool shutdown details.
+      // Preserve the sanitized startup error rather than leaking shutdown details.
     }
     throw error;
   }
 }
+
+function loadRuntimeEmailConfig(
+  environment: Record<string, string | undefined>,
+  production: boolean,
+): EmailConfig | null {
+  const names = [
+    'REDIS_URL',
+    'EMAIL_VERIFICATION_HMAC_SECRET',
+    'SMTP_HOST',
+    'SMTP_PORT',
+    'SMTP_SECURE',
+    'SMTP_USER',
+    'SMTP_PASS',
+    'SMTP_FROM_NAME',
+  ];
+  const configured = names.some((name) => environment[name] !== undefined);
+  return production || configured ? loadEmailConfig(environment) : null;
+}
+
+async function createRuntimeVerificationStore(
+  emailConfig: EmailConfig | null,
+  dependencies: SaasRuntimeDependencies,
+): Promise<VerificationCodeStore> {
+  if (!emailConfig) {
+    return new MemoryVerificationCodeStore(storeConfig(developmentEmailSettings()));
+  }
+  const redis = dependencies.createRedisClient?.(emailConfig.redisUrl)
+    ?? createClient({ url: emailConfig.redisUrl }) as unknown as RedisRuntimeClient;
+  redis.on?.('error', () => {
+    console.error('[SaaS] Redis verification connection error.');
+  });
+  try {
+    await redis.connect();
+  } catch {
+    try {
+      await redis.quit();
+    } catch {
+      // The client may already be closed; keep the startup error sanitized.
+    }
+    throw new RedisVerificationReadinessError();
+  }
+  return new RedisVerificationCodeStore(redis, storeConfig(emailConfig));
+}
+
+function storeConfig(settings: {
+  codeTtlSeconds: number;
+  resendCooldownSeconds: number;
+  emailHourlyLimit: number;
+  ipHourlyLimit: number;
+  maxAttempts: number;
+}): VerificationStoreConfig {
+  return {
+    codeTtlSeconds: settings.codeTtlSeconds,
+    resendCooldownSeconds: settings.resendCooldownSeconds,
+    emailHourlyLimit: settings.emailHourlyLimit,
+    ipHourlyLimit: settings.ipHourlyLimit,
+    maxAttempts: settings.maxAttempts,
+    reservationTtlSeconds: RESERVATION_TTL_SECONDS,
+  };
+}
+
+function developmentEmailSettings() {
+  return {
+    hmacSecret: randomBytes(32).toString('hex'),
+    codeTtlSeconds: 300,
+    resendCooldownSeconds: 60,
+    emailHourlyLimit: 5,
+    ipHourlyLimit: 20,
+    maxAttempts: 5,
+  };
+}
+
+const unavailableVerificationMailer: VerificationMailer = {
+  async sendCode() {
+    throw new MailDeliveryError();
+  },
+};
 
 async function assertDatabaseReady(pool: OwnedDatabasePool): Promise<void> {
   try {

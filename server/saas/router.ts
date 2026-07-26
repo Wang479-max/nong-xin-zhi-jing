@@ -3,6 +3,10 @@ import express, { type ErrorRequestHandler, type Request, type Response } from '
 import { AuthError, type AuthService, type AuthSessionResult } from './auth/service';
 import { createAccessAuthMiddleware } from './auth/middleware';
 import type { BillingService } from './billing/service';
+import {
+  EmailVerificationError,
+  type EmailVerificationService,
+} from './email/service';
 import type { EntitlementService } from './entitlements/service';
 import type { SaasRepository } from './repository';
 import { BillingError, SaasDomainError, type UserContext } from './types';
@@ -16,6 +20,7 @@ export interface SaasRouterDependencies {
   authService: AuthService;
   entitlementService: EntitlementService;
   billingService: BillingService;
+  verificationService: Pick<EmailVerificationService, 'sendCode'>;
   refreshTokenTtlSeconds: number;
   secureCookies: boolean;
 }
@@ -27,6 +32,16 @@ export function createSaasRouter(dependencies: SaasRouterDependencies): express.
   router.use(cookieParser());
   router.use(express.json({ limit: '64kb' }));
 
+  router.post('/auth/email-code', asyncRoute(async (request, response) => {
+    const input = asRecord(request.body);
+    const result = await dependencies.verificationService.sendCode({
+      email: input?.email,
+      purpose: input?.purpose,
+      ip: request.ip,
+    });
+    response.status(202).json(success(result));
+  }));
+
   router.post('/auth/register', asyncRoute(async (request, response) => {
     const session = await dependencies.authService.register(request.body);
     setRefreshCookie(response, session.refreshToken, dependencies);
@@ -37,6 +52,11 @@ export function createSaasRouter(dependencies: SaasRouterDependencies): express.
     const session = await dependencies.authService.login(request.body);
     setRefreshCookie(response, session.refreshToken, dependencies);
     response.json(success(publicSession(session)));
+  }));
+
+  router.post('/auth/password-reset', asyncRoute(async (request, response) => {
+    await dependencies.authService.resetPassword(request.body);
+    response.json(success({ reset: true }));
   }));
 
   router.post('/auth/refresh', asyncRoute(async (request, response) => {
@@ -153,17 +173,53 @@ const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => 
   }
 
   const mapped = mapKnownError(error);
-  response.status(mapped.status).json(failure(mapped.code, mapped.message));
+  if (mapped.retryAfterSeconds !== undefined) {
+    response.set('Retry-After', String(mapped.retryAfterSeconds));
+  }
+  response.status(mapped.status).json(failure(
+    mapped.code,
+    mapped.message,
+    mapped.retryAfterSeconds === undefined
+      ? undefined
+      : { retryAfterSeconds: mapped.retryAfterSeconds },
+  ));
 };
 
-function mapKnownError(error: unknown): { status: number; code: string; message: string } {
+function mapKnownError(error: unknown): {
+  status: number;
+  code: string;
+  message: string;
+  retryAfterSeconds?: number;
+} {
+  if (error instanceof EmailVerificationError) {
+    const mappings = {
+      INVALID_EMAIL: [400, 'Invalid email address.'],
+      INVALID_CODE: [400, 'Invalid verification code.'],
+      CODE_EXPIRED: [410, 'Verification code has expired.'],
+      CODE_LOCKED: [429, 'Too many incorrect verification attempts.'],
+      TOO_MANY_REQUESTS: [429, 'Too many verification requests.'],
+      EMAIL_DELIVERY_UNAVAILABLE: [503, 'Email delivery is temporarily unavailable.'],
+      VERIFICATION_UNAVAILABLE: [503, 'Email verification is temporarily unavailable.'],
+    } as const;
+    const [status, message] = mappings[error.code];
+    return {
+      status,
+      code: error.code,
+      message,
+      retryAfterSeconds: error.code === 'TOO_MANY_REQUESTS'
+        ? error.retryAfterSeconds
+        : undefined,
+    };
+  }
   if (error instanceof AuthError) {
     const mappings = {
       VALIDATION_ERROR: [400, 'Invalid request.'],
-      INVALID_CREDENTIALS: [401, 'Invalid username or password.'],
+      INVALID_CREDENTIALS: [401, 'Invalid email or password.'],
       INVALID_REFRESH_TOKEN: [401, 'Invalid refresh token.'],
       INVALID_ACCESS_TOKEN: [401, 'Invalid access token.'],
       USERNAME_TAKEN: [409, 'Username is already taken.'],
+      EMAIL_TAKEN: [409, 'Email is already registered.'],
+      ACCOUNT_DISABLED: [403, 'Account is disabled.'],
     } as const;
     const [status, message] = mappings[error.code];
     return { status, code: error.code, message };
@@ -186,11 +242,18 @@ function mapKnownError(error: unknown): { status: number; code: string; message:
   }
   if (error instanceof SaasDomainError) {
     if (error.code === 'USERNAME_TAKEN') return { status: 409, code: error.code, message: 'Username is already taken.' };
+    if (error.code === 'EMAIL_TAKEN') return { status: 409, code: error.code, message: 'Email is already registered.' };
     if (error.code === 'USER_NOT_FOUND') return { status: 404, code: error.code, message: 'User was not found.' };
     if (error.code === 'ORDER_NOT_FOUND') return { status: 404, code: error.code, message: 'Order was not found.' };
     if (error.code === 'PRODUCT_NOT_FOUND') return { status: 404, code: error.code, message: 'Product was not found.' };
   }
   return { status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error.' };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function isPayloadTooLarge(error: unknown): boolean {

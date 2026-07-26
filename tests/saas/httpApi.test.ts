@@ -1,11 +1,12 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../server/saas/auth/service';
 import { createAccessAuthMiddleware, createFeatureGuard } from '../../server/saas/auth/middleware';
 import { BillingService } from '../../server/saas/billing/service';
 import { createAuthConfig } from '../../server/saas/config';
+import { EmailVerificationError, type EmailVerificationService } from '../../server/saas/email/service';
 import { EntitlementService } from '../../server/saas/entitlements/service';
 import { MemorySaasRepository } from '../../server/saas/memoryRepository';
 import { createSaasRouter, SAAS_REFRESH_COOKIE_NAME } from '../../server/saas/router';
@@ -14,16 +15,46 @@ const SECRET = 'test-access-token-secret-that-is-longer-than-thirty-two-characte
 const PASSWORD = 'StrongPassword#123';
 
 describe('versioned SaaS HTTP API', () => {
+  it('accepts an email-code request without returning the code or exposing account existence', async () => {
+    const { app, verificationService } = createTestApp();
+
+    const response = await request(app)
+      .post('/api/v1/auth/email-code')
+      .set('X-Forwarded-For', '203.0.113.10')
+      .send({ email: 'grower@example.com', purpose: 'register' });
+
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual({
+      success: true,
+      data: { accepted: true, retryAfterSeconds: 60, expiresInSeconds: 300 },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('123456');
+    expect(verificationService.sendCode).toHaveBeenCalledWith({
+      email: 'grower@example.com',
+      purpose: 'register',
+      ip: '203.0.113.10',
+    });
+  });
+
   it('registers a public owner, returns only public session data, and sets the refresh cookie', async () => {
     const { app } = createTestApp();
 
-    const response = await request(app).post('/api/v1/auth/register').send({ username: ' New.Farmer ', password: PASSWORD });
+    const response = await request(app).post('/api/v1/auth/register').send({
+      email: ' New.Farmer@Example.COM ',
+      password: PASSWORD,
+      verificationCode: '123456',
+    });
 
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({
       success: true,
       data: {
-        user: { username: 'new.farmer', platformRole: 'user' },
+        user: {
+          email: 'new.farmer@example.com',
+          displayName: 'new.farmer',
+          accountStatus: 'active',
+          platformRole: 'user',
+        },
         membership: { role: 'owner' },
         entitlement: { plan: 'free', features: ['monitoring.basic'] },
         accessToken: expect.any(String),
@@ -40,31 +71,109 @@ describe('versioned SaaS HTTP API', () => {
 
   it('maps duplicate registration to a stable conflict without leaking internals', async () => {
     const { app } = createTestApp();
-    await request(app).post('/api/v1/auth/register').send({ username: 'duplicate', password: PASSWORD });
+    await request(app).post('/api/v1/auth/register').send({
+      email: 'duplicate@example.com', password: PASSWORD, verificationCode: '123456',
+    });
 
-    const response = await request(app).post('/api/v1/auth/register').send({ username: 'DUPLICATE', password: PASSWORD });
+    const response = await request(app).post('/api/v1/auth/register').send({
+      email: 'DUPLICATE@EXAMPLE.COM', password: PASSWORD, verificationCode: '654321',
+    });
 
     expect(response.status).toBe(409);
-    expect(response.body).toEqual({ success: false, error: { code: 'USERNAME_TAKEN', message: 'Username is already taken.' } });
+    expect(response.body).toEqual({ success: false, error: { code: 'EMAIL_TAKEN', message: 'Email is already registered.' } });
     expect(JSON.stringify(response.body)).not.toMatch(/stack|sql|hash|jwt/i);
   });
 
   it('normalizes login and rejects wrong credentials with the same stable error', async () => {
     const { app } = createTestApp();
-    await request(app).post('/api/v1/auth/register').send({ username: 'login-user', password: PASSWORD });
+    await register(app, 'login-user');
 
-    const login = await request(app).post('/api/v1/auth/login').send({ username: ' LOGIN-USER ', password: PASSWORD });
-    const wrong = await request(app).post('/api/v1/auth/login').send({ username: 'login-user', password: 'wrong' });
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: ' LOGIN-USER@EXAMPLE.COM ', password: PASSWORD,
+    });
+    const wrong = await request(app).post('/api/v1/auth/login').send({
+      email: 'login-user@example.com', password: 'wrong',
+    });
 
     expect(login.status).toBe(200);
-    expect(login.body.data.user.username).toBe('login-user');
+    expect(login.body.data.user.email).toBe('login-user@example.com');
     expect(wrong.status).toBe(401);
-    expect(wrong.body).toEqual({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Invalid username or password.' } });
+    expect(wrong.body).toEqual({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' } });
+  });
+
+  it('resets a verified password without exposing whether an account exists', async () => {
+    const { app } = createTestApp();
+    await register(app, 'reset-user');
+
+    const reset = await request(app).post('/api/v1/auth/password-reset').send({
+      email: 'reset-user@example.com',
+      password: 'NewStrongPassword#456',
+      verificationCode: '654321',
+    });
+    const unknown = await request(app).post('/api/v1/auth/password-reset').send({
+      email: 'unknown@example.com',
+      password: 'NewStrongPassword#456',
+      verificationCode: '654321',
+    });
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: 'reset-user@example.com',
+      password: 'NewStrongPassword#456',
+    });
+
+    expect(reset.status).toBe(200);
+    expect(unknown.status).toBe(200);
+    expect(reset.body).toEqual({ success: true, data: { reset: true } });
+    expect(unknown.body).toEqual(reset.body);
+    expect(login.status).toBe(200);
+  });
+
+  it('maps verification throttling to 429 with Retry-After', async () => {
+    const { app, verificationService } = createTestApp();
+    vi.mocked(verificationService.sendCode).mockRejectedValueOnce(
+      new EmailVerificationError('TOO_MANY_REQUESTS', 42),
+    );
+
+    const response = await request(app).post('/api/v1/auth/email-code').send({
+      email: 'grower@example.com',
+      purpose: 'register',
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.headers['retry-after']).toBe('42');
+    expect(response.body).toEqual({
+      success: false,
+      error: {
+        code: 'TOO_MANY_REQUESTS',
+        message: 'Too many verification requests.',
+        retryAfterSeconds: 42,
+      },
+    });
+  });
+
+  it.each([
+    ['INVALID_EMAIL', 400],
+    ['INVALID_CODE', 400],
+    ['CODE_EXPIRED', 410],
+    ['CODE_LOCKED', 429],
+    ['EMAIL_DELIVERY_UNAVAILABLE', 503],
+    ['VERIFICATION_UNAVAILABLE', 503],
+  ] as const)('maps verification error %s to status %i', async (code, status) => {
+    const { app, verificationService } = createTestApp();
+    vi.mocked(verificationService.sendCode).mockRejectedValueOnce(new EmailVerificationError(code));
+
+    const response = await request(app).post('/api/v1/auth/email-code').send({
+      email: 'grower@example.com',
+      purpose: 'register',
+    });
+
+    expect(response.status).toBe(status);
+    expect(response.body.error.code).toBe(code);
+    expect(JSON.stringify(response.body)).not.toMatch(/stack|smtp|redis|password/i);
   });
 
   it('rotates refresh cookies and rejects replay of the consumed cookie', async () => {
     const { app } = createTestApp();
-    const registered = await request(app).post('/api/v1/auth/register').send({ username: 'rotate-user', password: PASSWORD });
+    const registered = await registerResponse(app, 'rotate-user');
     const originalCookie = registered.headers['set-cookie'][0];
 
     const rotated = await request(app).post('/api/v1/auth/refresh').set('Cookie', originalCookie);
@@ -92,7 +201,7 @@ describe('versioned SaaS HTTP API', () => {
 
   it('logs out idempotently, revokes the refresh token, and clears the same cookie path', async () => {
     const { app } = createTestApp();
-    const registered = await request(app).post('/api/v1/auth/register').send({ username: 'logout-user', password: PASSWORD });
+    const registered = await registerResponse(app, 'logout-user');
     const cookie = registered.headers['set-cookie'][0];
 
     const logout = await request(app).post('/api/v1/auth/logout').set('Cookie', cookie);
@@ -171,7 +280,7 @@ describe('versioned SaaS HTTP API', () => {
     const entitlements = await request(app).get('/api/v1/entitlements').set(auth);
     const catalog = await request(app).get('/api/v1/catalog').set(auth);
 
-    expect(me.body.data.user.username).toBe('profile-user');
+    expect(me.body.data.user.email).toBe('profile-user@example.com');
     expect(entitlements.body.data).toMatchObject({ plan: 'free', limits: { aiMonthly: 5 } });
     expect(catalog.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'addon.ai.pro', amountFen: 9900 })]));
     expect((await request(app).get('/api/v1/catalog')).status).toBe(401);
@@ -317,7 +426,15 @@ function createTestApp(
     accessTokenTtlSeconds: 15 * 60,
     refreshTokenTtlSeconds: 60 * 60,
   });
-  const authService = new AuthService(repository, authConfig);
+  const verificationService = {
+    sendCode: vi.fn(async () => ({
+      accepted: true as const,
+      retryAfterSeconds: 60,
+      expiresInSeconds: 300,
+    })),
+    consumeCode: vi.fn(async () => {}),
+  } satisfies Pick<EmailVerificationService, 'sendCode' | 'consumeCode'>;
+  const authService = new AuthService(repository, authConfig, verificationService);
   const entitlementService = new EntitlementService(repository);
   const billingService = new BillingService(repository, { paymentMode });
   const dependencies = {
@@ -325,10 +442,12 @@ function createTestApp(
     authService,
     entitlementService,
     billingService,
+    verificationService,
     refreshTokenTtlSeconds: authConfig.refreshTokenTtlSeconds,
     secureCookies: false,
   };
   const app = express();
+  app.set('trust proxy', 1);
   app.get(
     '/api/v1/private-ai',
     createAccessAuthMiddleware({ repository, authService }),
@@ -336,7 +455,7 @@ function createTestApp(
     (_req, res) => res.json({ success: true, data: { allowed: true } }),
   );
   app.use('/api/v1', createSaasRouter(dependencies));
-  return { app, repository, authService, entitlementService, billingService };
+  return { app, repository, authService, entitlementService, billingService, verificationService };
 }
 
 class ExplodingContextRepository extends MemorySaasRepository {
@@ -356,7 +475,15 @@ class ExplodingContextRepository extends MemorySaasRepository {
 }
 
 async function register(app: express.Express, username: string): Promise<{ accessToken: string; organization: { id: string } }> {
-  const response = await request(app).post('/api/v1/auth/register').send({ username, password: PASSWORD });
+  const response = await registerResponse(app, username);
   expect(response.status).toBe(201);
   return response.body.data;
+}
+
+function registerResponse(app: express.Express, identity: string) {
+  return request(app).post('/api/v1/auth/register').send({
+    email: `${identity}@example.com`,
+    password: PASSWORD,
+    verificationCode: '123456',
+  });
 }
