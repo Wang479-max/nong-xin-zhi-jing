@@ -106,6 +106,17 @@ describe('PgSaasRepository', () => {
     expect(db.tags()).toEqual(['begin', 'insert-user', 'rollback']);
   });
 
+  it('never marks a legacy compatibility identity as email verified', async () => {
+    const db = new ScriptedDb(({ tag }) => tag === 'free-subscription-product' ? [{
+      id: 'free', plan_id: 'free', features: ['monitoring.basic'], limits: { plots: 2 },
+    }] : []);
+    const repository = new PgSaasRepository(db as never);
+
+    await repository.createUserWithOrganization({ username: 'legacy-user', passwordHash: 'hash' });
+
+    expect(db.call('insert-user')?.values?.[4]).toBeNull();
+  });
+
   it('resets a password and revokes active sessions for that user in one transaction', async () => {
     const db = new ScriptedDb(({ tag }) => tag === 'reset-password' ? [{ user_id: 'user-1' }] : []);
     const repository = new PgSaasRepository(db as never);

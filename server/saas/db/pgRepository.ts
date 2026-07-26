@@ -46,7 +46,7 @@ export class PgSaasRepository implements SaasRepository {
     const email = verifiedEmailRegistration ? username : legacyEmail(username);
     const displayName = verifiedEmailRegistration ? input.displayName.trim() : username;
     const createdAt = new Date().toISOString();
-    const emailVerifiedAt = verifiedEmailRegistration ? input.emailVerifiedAt : createdAt;
+    const emailVerifiedAt = verifiedEmailRegistration ? input.emailVerifiedAt : null;
     const user: User = {
       id: randomUUID(),
       username,
