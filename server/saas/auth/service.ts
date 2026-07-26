@@ -3,37 +3,42 @@ import { createHash, randomBytes } from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { z } from 'zod';
 import { ACCESS_TOKEN_TTL_SECONDS, type AuthConfig } from '../config';
+import type { EmailVerificationService } from '../email/service';
 import type { SaasRepository } from '../repository';
 import type { MembershipRole, PlatformRole, UserContext } from '../types';
 
 const PASSWORD_HASH_ROUNDS = 12;
 const DUMMY_PASSWORD_HASH = '$2b$12$k9bkNY.FeR0jFMFlLyKqvOZfipadpCtvJwQwBlr.H3ibUJVHIvMGO';
 
-const usernameSchema = z.string()
-  .transform((username) => username.trim().toLowerCase())
-  .pipe(z.string().min(3).max(64).regex(/^[a-z0-9][a-z0-9._-]*$/));
+const emailSchema = z.string().trim().toLowerCase().email().max(254);
+const passwordSchema = z.string()
+  .min(12)
+  .regex(/[a-z]/)
+  .regex(/[A-Z]/)
+  .regex(/\d/)
+  .regex(/[^A-Za-z0-9]/);
 
 const registrationSchema = z.object({
-  username: usernameSchema,
-  password: z.string()
-    .min(12)
-    .regex(/[a-z]/)
-    .regex(/[A-Z]/)
-    .regex(/\d/)
-    .regex(/[^A-Za-z0-9]/),
+  email: emailSchema,
+  password: passwordSchema,
+  verificationCode: z.string().regex(/^\d{6}$/),
 }).strict();
 
 const loginSchema = z.object({
-  username: usernameSchema,
+  email: emailSchema,
   password: z.string().min(1),
 }).strict();
+
+const passwordResetSchema = registrationSchema;
 
 export type AuthErrorCode =
   | 'VALIDATION_ERROR'
   | 'INVALID_CREDENTIALS'
   | 'INVALID_REFRESH_TOKEN'
   | 'INVALID_ACCESS_TOKEN'
-  | 'USERNAME_TAKEN';
+  | 'USERNAME_TAKEN'
+  | 'EMAIL_TAKEN'
+  | 'ACCOUNT_DISABLED';
 
 export class AuthError extends Error {
   constructor(public readonly code: AuthErrorCode) {
@@ -60,21 +65,29 @@ export class AuthService {
   constructor(
     private readonly repository: SaasRepository,
     private readonly config: AuthConfig,
+    private readonly verificationService?: Pick<EmailVerificationService, 'consumeCode'>,
   ) {}
 
   async register(input: unknown): Promise<AuthSessionResult> {
     const parsed = registrationSchema.safeParse(input);
-    if (!parsed.success) throw new AuthError('VALIDATION_ERROR');
+    if (!parsed.success || !this.verificationService) throw new AuthError('VALIDATION_ERROR');
 
+    await this.verificationService.consumeCode({
+      email: parsed.data.email,
+      purpose: 'register',
+      code: parsed.data.verificationCode,
+    });
     const passwordHash = await bcrypt.hash(parsed.data.password, PASSWORD_HASH_ROUNDS);
     try {
       const context = await this.repository.createUserWithOrganization({
-        username: parsed.data.username,
+        email: parsed.data.email,
+        displayName: displayNameFromEmail(parsed.data.email),
         passwordHash,
+        emailVerifiedAt: new Date().toISOString(),
       });
       return this.createSession(context);
     } catch (error) {
-      if (isDomainError(error, 'USERNAME_TAKEN')) throw new AuthError('USERNAME_TAKEN');
+      if (isDomainError(error, 'EMAIL_TAKEN')) throw new AuthError('EMAIL_TAKEN');
       throw error;
     }
   }
@@ -83,14 +96,35 @@ export class AuthService {
     const parsed = loginSchema.safeParse(input);
     if (!parsed.success) throw new AuthError('INVALID_CREDENTIALS');
 
-    const credential = await this.repository.findUserByUsername(parsed.data.username);
+    const credential = await this.repository.findUserByEmail(parsed.data.email);
     const passwordHash = credential?.passwordHash ?? DUMMY_PASSWORD_HASH;
     const validPassword = await bcrypt.compare(parsed.data.password, passwordHash);
     if (!credential || !validPassword) throw new AuthError('INVALID_CREDENTIALS');
+    if (credential.user.accountStatus !== 'active') throw new AuthError('ACCOUNT_DISABLED');
 
     const context = await this.repository.findUserContext(credential.user.id);
     if (!context) throw new AuthError('INVALID_CREDENTIALS');
+    if (context.user.accountStatus !== 'active') throw new AuthError('ACCOUNT_DISABLED');
     return this.createSession(context);
+  }
+
+  async resetPassword(input: unknown): Promise<void> {
+    const parsed = passwordResetSchema.safeParse(input);
+    if (!parsed.success || !this.verificationService) throw new AuthError('VALIDATION_ERROR');
+
+    await this.verificationService.consumeCode({
+      email: parsed.data.email,
+      purpose: 'reset_password',
+      code: parsed.data.verificationCode,
+    });
+    const passwordHash = await bcrypt.hash(parsed.data.password, PASSWORD_HASH_ROUNDS);
+    const credential = await this.repository.findUserByEmail(parsed.data.email);
+    if (!credential) return;
+    await this.repository.resetPasswordAndRevokeSessions({
+      userId: credential.user.id,
+      passwordHash,
+      revokedAt: new Date().toISOString(),
+    });
   }
 
   async refresh(refreshToken: unknown): Promise<AuthSessionResult> {
@@ -107,6 +141,7 @@ export class AuthService {
 
     const context = await this.repository.findUserContext(session.userId);
     if (!context) throw new AuthError('INVALID_REFRESH_TOKEN');
+    if (context.user.accountStatus !== 'active') throw new AuthError('ACCOUNT_DISABLED');
 
     const replacementRefreshToken = randomBytes(32).toString('base64url');
     const consumed = await this.repository.rotateRefreshSession(tokenHash, {
@@ -170,6 +205,10 @@ export class AuthService {
 
 function hashRefreshToken(refreshToken: string): string {
   return createHash('sha256').update(refreshToken).digest('hex');
+}
+
+function displayNameFromEmail(email: string): string {
+  return email.slice(0, email.lastIndexOf('@')).slice(0, 64);
 }
 
 function isDomainError(error: unknown, code: string): error is { code: string } {

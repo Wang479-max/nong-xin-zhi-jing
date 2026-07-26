@@ -175,6 +175,17 @@ export class MemorySaasRepository implements SaasRepository {
     return copy({ user: user.user, organization, membership, entitlement });
   }
 
+  async setUserDisplayName(userId: string, displayName: string): Promise<User> {
+    const credential = this.usersById.get(userId);
+    if (!credential) throw new SaasDomainError('USER_NOT_FOUND', 'User was not found.');
+    const normalized = displayName.trim();
+    if (normalized.length === 0 || normalized.length > 64) {
+      throw new SaasDomainError('VALIDATION_ERROR', 'Display name is invalid.');
+    }
+    credential.user.displayName = normalized;
+    return copy(credential.user);
+  }
+
   async setUserPlatformRole(userId: string, role: PlatformRole): Promise<User> {
     const credential = this.usersById.get(userId);
     if (!credential) throw new SaasDomainError('USER_NOT_FOUND', 'User was not found.');

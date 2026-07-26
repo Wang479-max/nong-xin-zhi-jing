@@ -15,10 +15,20 @@ describe('secure platform admin bootstrap', () => {
   it('creates and promotes a missing admin with a cost-12 hash and no refresh session', async () => {
     const repository = new MemorySaasRepository();
 
-    const context = await bootstrapPlatformAdmin(repository, { username: ' Admin ', password: PASSWORD });
-    const credential = await repository.findUserByUsername('admin');
+    const context = await bootstrapPlatformAdmin(repository, {
+      email: ' Admin@Example.COM ',
+      password: PASSWORD,
+      displayName: 'admin',
+    });
+    const credential = await repository.findUserByEmail('admin@example.com');
 
-    expect(context.user).toMatchObject({ username: 'admin', platformRole: 'platform_admin' });
+    expect(context.user).toMatchObject({
+      username: 'admin@example.com',
+      email: 'admin@example.com',
+      displayName: 'admin',
+      accountStatus: 'active',
+      platformRole: 'platform_admin',
+    });
     expect(credential?.passwordHash).toMatch(/^\$2[aby]\$12\$/);
     expect(await bcrypt.compare(PASSWORD, credential!.passwordHash)).toBe(true);
   });
@@ -26,9 +36,18 @@ describe('secure platform admin bootstrap', () => {
   it('requires the supplied password to match an existing credential before promotion', async () => {
     const repository = new MemorySaasRepository();
     const passwordHash = await bcrypt.hash(PASSWORD, 12);
-    const existing = await repository.createUserWithOrganization({ username: 'existing-admin', passwordHash });
+    const existing = await repository.createUserWithOrganization({
+      email: 'existing-admin@example.com',
+      displayName: 'Existing user',
+      passwordHash,
+      emailVerifiedAt: new Date().toISOString(),
+    });
 
-    await expect(bootstrapPlatformAdmin(repository, { username: 'existing-admin', password: 'WrongPassword#123' }))
+    await expect(bootstrapPlatformAdmin(repository, {
+      email: 'existing-admin@example.com',
+      password: 'WrongPassword#123',
+      displayName: 'admin',
+    }))
       .rejects.toMatchObject({ code: 'ADMIN_BOOTSTRAP_FAILED', message: 'Platform admin bootstrap failed.' });
     await expect(repository.findUserContext(existing.user.id)).resolves.toMatchObject({ user: { platformRole: 'user' } });
   });
@@ -36,48 +55,87 @@ describe('secure platform admin bootstrap', () => {
   it('is idempotent for an existing administrator with the correct password', async () => {
     const repository = new MemorySaasRepository();
 
-    const first = await bootstrapPlatformAdmin(repository, { username: 'admin', password: PASSWORD });
-    const second = await bootstrapPlatformAdmin(repository, { username: 'admin', password: PASSWORD });
+    const first = await bootstrapPlatformAdmin(repository, {
+      email: 'admin@example.com', password: PASSWORD, displayName: 'admin',
+    });
+    const second = await bootstrapPlatformAdmin(repository, {
+      email: 'admin@example.com', password: PASSWORD, displayName: 'admin',
+    });
 
     expect(second.user.id).toBe(first.user.id);
     expect(second.user.platformRole).toBe('platform_admin');
+  });
+
+  it('normalizes the display name when promoting an existing account', async () => {
+    const repository = new MemorySaasRepository();
+    const passwordHash = await bcrypt.hash(PASSWORD, 12);
+    await repository.createUserWithOrganization({
+      email: 'admin@example.com',
+      displayName: 'Existing grower',
+      passwordHash,
+      emailVerifiedAt: new Date().toISOString(),
+    });
+
+    const context = await bootstrapPlatformAdmin(repository, {
+      email: 'admin@example.com',
+      password: PASSWORD,
+      displayName: 'admin',
+    });
+
+    expect(context.user).toMatchObject({
+      email: 'admin@example.com',
+      displayName: 'admin',
+      platformRole: 'platform_admin',
+    });
   });
 
   it('converges concurrent bootstrap attempts on one administrator', async () => {
     const repository = new MemorySaasRepository();
 
     const [first, second] = await Promise.all([
-      bootstrapPlatformAdmin(repository, { username: 'race-admin', password: PASSWORD }),
-      bootstrapPlatformAdmin(repository, { username: 'race-admin', password: PASSWORD }),
+      bootstrapPlatformAdmin(repository, {
+        email: 'race-admin@example.com', password: PASSWORD, displayName: 'admin',
+      }),
+      bootstrapPlatformAdmin(repository, {
+        email: 'race-admin@example.com', password: PASSWORD, displayName: 'admin',
+      }),
     ]);
 
     expect(first.user.id).toBe(second.user.id);
-    await expect(repository.findUserByUsername('race-admin')).resolves.toMatchObject({
+    await expect(repository.findUserByEmail('race-admin@example.com')).resolves.toMatchObject({
       user: { platformRole: 'platform_admin' },
     });
   });
 
   it('bootstraps only when both explicit environment credentials are present', async () => {
-    const usernameOnly = await createSaasRuntimeFromEnv({
-      NODE_ENV: 'test', ACCESS_TOKEN_SECRET: SECRET, ADMIN_USERNAME: 'admin', PAYMENT_MODE: 'disabled',
+    const emailOnly = await createSaasRuntimeFromEnv({
+      NODE_ENV: 'test', ACCESS_TOKEN_SECRET: SECRET, ADMIN_EMAIL: 'admin@example.com', PAYMENT_MODE: 'disabled',
     });
     const both = await createSaasRuntimeFromEnv({
-      NODE_ENV: 'test', ACCESS_TOKEN_SECRET: SECRET, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: PASSWORD, PAYMENT_MODE: 'mock',
+      NODE_ENV: 'test',
+      ACCESS_TOKEN_SECRET: SECRET,
+      ADMIN_EMAIL: 'admin@example.com',
+      ADMIN_PASSWORD: PASSWORD,
+      PAYMENT_MODE: 'mock',
     });
 
-    await expect(usernameOnly.repository.findUserByUsername('admin')).resolves.toBeNull();
-    await expect(both.authService.login({ username: 'admin', password: PASSWORD })).resolves.toMatchObject({
-      user: { username: 'admin', platformRole: 'platform_admin' },
+    await expect(emailOnly.repository.findUserByEmail('admin@example.com')).resolves.toBeNull();
+    await expect(both.authService.login({ email: 'admin@example.com', password: PASSWORD })).resolves.toMatchObject({
+      user: { email: 'admin@example.com', displayName: 'admin', platformRole: 'platform_admin' },
     });
-    await usernameOnly.close();
+    await emailOnly.close();
     await both.close();
   });
 
   it('allows a bootstrapped administrator through every feature guard', async () => {
     const runtime = await createSaasRuntimeFromEnv({
-      NODE_ENV: 'test', ACCESS_TOKEN_SECRET: SECRET, ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: PASSWORD, PAYMENT_MODE: 'mock',
+      NODE_ENV: 'test',
+      ACCESS_TOKEN_SECRET: SECRET,
+      ADMIN_EMAIL: 'admin@example.com',
+      ADMIN_PASSWORD: PASSWORD,
+      PAYMENT_MODE: 'mock',
     });
-    const session = await runtime.authService.login({ username: 'admin', password: PASSWORD });
+    const session = await runtime.authService.login({ email: 'admin@example.com', password: PASSWORD });
     const app = express();
     app.get(
       '/private-control',
@@ -98,11 +156,15 @@ describe('secure platform admin bootstrap', () => {
     app.use('/api/v1', runtime.router);
 
     const response = await request(app).post('/api/v1/auth/register').send({
-      username: 'self-admin', password: PASSWORD, platformRole: 'platform_admin', role: 'platform_admin',
+      email: 'self-admin@example.com',
+      password: PASSWORD,
+      verificationCode: '123456',
+      platformRole: 'platform_admin',
+      role: 'platform_admin',
     });
 
     expect(response.status).toBe(400);
-    expect(await runtime.repository.findUserByUsername('self-admin')).toBeNull();
+    expect(await runtime.repository.findUserByEmail('self-admin@example.com')).toBeNull();
     await runtime.close();
   });
 

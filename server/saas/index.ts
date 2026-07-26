@@ -88,10 +88,11 @@ export async function createSaasRuntimeFromEnv(
   try {
     if (pool) await assertDatabaseReady(pool);
 
-    if (environment.ADMIN_USERNAME !== undefined && environment.ADMIN_PASSWORD !== undefined) {
+    if (environment.ADMIN_EMAIL !== undefined && environment.ADMIN_PASSWORD !== undefined) {
       await bootstrapPlatformAdmin(repository, {
-        username: environment.ADMIN_USERNAME,
+        email: environment.ADMIN_EMAIL,
         password: environment.ADMIN_PASSWORD,
+        displayName: 'admin',
       });
     }
 

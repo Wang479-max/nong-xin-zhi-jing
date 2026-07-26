@@ -19,6 +19,23 @@ describe('PgSaasRepository', () => {
     await expect(missing.setUserPlatformRole('missing', 'platform_admin')).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
   });
 
+  it('updates a user display name and returns a stable missing-user error', async () => {
+    const db = new ScriptedDb(({ tag }) => tag === 'set-user-display-name' ? [{
+      id: 'user-1', normalized_username: 'admin@example.com', normalized_email: 'admin@example.com',
+      display_name: 'admin', account_status: 'active', platform_role: 'platform_admin',
+      created_at: '2030-01-01T00:00:00.000Z',
+    }] : []);
+    const repository = new PgSaasRepository(db as never);
+
+    await expect(repository.setUserDisplayName('user-1', 'admin')).resolves.toMatchObject({
+      id: 'user-1', displayName: 'admin',
+    });
+    expect(db.call('set-user-display-name')?.values).toEqual(['user-1', 'admin']);
+
+    const missing = new PgSaasRepository(new ScriptedDb(() => []) as never);
+    await expect(missing.setUserDisplayName('missing', 'admin')).rejects.toMatchObject({ code: 'USER_NOT_FOUND' });
+  });
+
   it('normalizes username lookup parameters and maps timestamps defensively', async () => {
     const db = new ScriptedDb(({ tag }) => tag === 'find-user-by-username' ? [{
       id: 'user-1', normalized_username: 'farmer', platform_role: 'user',

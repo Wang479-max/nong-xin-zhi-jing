@@ -4,16 +4,16 @@ import type { SaasRepository } from '../repository';
 import type { UserContext } from '../types';
 
 const PASSWORD_HASH_ROUNDS = 12;
+const passwordSchema = z.string()
+  .min(12)
+  .regex(/[a-z]/)
+  .regex(/[A-Z]/)
+  .regex(/\d/)
+  .regex(/[^A-Za-z0-9]/);
 const bootstrapSchema = z.object({
-  username: z.string()
-    .transform((username) => username.trim().toLowerCase())
-    .pipe(z.string().min(3).max(64).regex(/^[a-z0-9][a-z0-9._-]*$/)),
-  password: z.string()
-    .min(12)
-    .regex(/[a-z]/)
-    .regex(/[A-Z]/)
-    .regex(/\d/)
-    .regex(/[^A-Za-z0-9]/),
+  email: z.string().trim().toLowerCase().email().max(254),
+  password: passwordSchema,
+  displayName: z.literal('admin'),
 }).strict();
 
 export class AdminBootstrapError extends Error {
@@ -27,31 +27,35 @@ export class AdminBootstrapError extends Error {
 
 export async function bootstrapPlatformAdmin(
   repository: SaasRepository,
-  input: { username: string; password: string },
+  input: { email: string; password: string; displayName: 'admin' },
 ): Promise<UserContext> {
   try {
     const parsed = bootstrapSchema.safeParse(input);
     if (!parsed.success) throw new AdminBootstrapError();
 
-    const credential = await repository.findUserByUsername(parsed.data.username);
+    const credential = await repository.findUserByEmail(parsed.data.email);
     let userId: string;
     if (credential) {
       if (!await bcrypt.compare(parsed.data.password, credential.passwordHash)) {
         throw new AdminBootstrapError();
       }
+      if (credential.user.accountStatus !== 'active') throw new AdminBootstrapError();
       userId = credential.user.id;
     } else {
       const passwordHash = await bcrypt.hash(parsed.data.password, PASSWORD_HASH_ROUNDS);
       try {
         const created = await repository.createUserWithOrganization({
-          username: parsed.data.username,
+          email: parsed.data.email,
+          displayName: parsed.data.displayName,
           passwordHash,
+          emailVerifiedAt: new Date().toISOString(),
         });
         userId = created.user.id;
       } catch (error) {
-        if (!hasErrorCode(error, 'USERNAME_TAKEN')) throw error;
-        const concurrentCredential = await repository.findUserByUsername(parsed.data.username);
+        if (!hasErrorCode(error, 'EMAIL_TAKEN')) throw error;
+        const concurrentCredential = await repository.findUserByEmail(parsed.data.email);
         if (!concurrentCredential
+          || concurrentCredential.user.accountStatus !== 'active'
           || !await bcrypt.compare(parsed.data.password, concurrentCredential.passwordHash)) {
           throw new AdminBootstrapError();
         }
@@ -59,6 +63,7 @@ export async function bootstrapPlatformAdmin(
       }
     }
 
+    await repository.setUserDisplayName(userId, parsed.data.displayName);
     await repository.setUserPlatformRole(userId, 'platform_admin');
     const context = await repository.findUserContext(userId);
     if (!context) throw new AdminBootstrapError();

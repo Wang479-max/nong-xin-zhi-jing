@@ -38,6 +38,7 @@ export interface SaasRepository {
   findUserByUsername(username: string): Promise<UserWithCredential | null>;
   findUserByEmail(email: string): Promise<UserWithCredential | null>;
   findUserContext(userId: string): Promise<UserContext | null>;
+  setUserDisplayName(userId: string, displayName: string): Promise<User>;
   setUserPlatformRole(userId: string, role: PlatformRole): Promise<User>;
   saveRefreshSession(session: RefreshSession): Promise<void>;
   findRefreshSession(tokenHash: string): Promise<RefreshSession | null>;

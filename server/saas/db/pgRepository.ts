@@ -215,6 +215,23 @@ export class PgSaasRepository implements SaasRepository {
     };
   }
 
+  async setUserDisplayName(userId: string, displayName: string): Promise<User> {
+    const normalized = displayName.trim();
+    if (normalized.length === 0 || normalized.length > 64) {
+      throw new SaasDomainError('VALIDATION_ERROR', 'Display name is invalid.');
+    }
+    const result = await this.database.query<Row>(
+      `/* set-user-display-name */
+       UPDATE users SET display_name = $2, updated_at = now()
+       WHERE id = $1
+       RETURNING id, normalized_username, normalized_email, display_name, account_status, platform_role, created_at`,
+      [userId, normalized],
+    );
+    const row = result.rows[0];
+    if (!row) throw new SaasDomainError('USER_NOT_FOUND', 'User was not found.');
+    return mapUser(row);
+  }
+
   async setUserPlatformRole(userId: string, role: PlatformRole): Promise<User> {
     const result = await this.database.query<Row>(
       `/* set-user-platform-role */
