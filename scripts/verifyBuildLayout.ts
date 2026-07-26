@@ -7,6 +7,7 @@ const PRIVATE_BUILD_NAMES = new Set([
   'server.cjs.map',
   'migrate.mjs',
   'migrate.mjs.map',
+  'smtp-smoke.mjs',
 ]);
 
 export async function verifyBuildLayout(distDirectory = 'dist'): Promise<void> {
@@ -15,6 +16,7 @@ export async function verifyBuildLayout(distDirectory = 'dist'): Promise<void> {
     join(dist, 'public', 'index.html'),
     join(dist, 'server.cjs'),
     join(dist, 'migrate.mjs'),
+    join(dist, 'smtp-smoke.mjs'),
     join(dist, 'migrations'),
   ];
   await Promise.all(required.map((path) => access(path)));

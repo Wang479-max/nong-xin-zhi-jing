@@ -83,6 +83,41 @@ describe('production deployment contract', () => {
     expect(redis).toMatch(/\$\{REDIS_PASSWORD(?::[^}]*)?\}/);
   });
 
+  it('passes email account secrets only to the application runtime', () => {
+    const compose = read('docker-compose.yml');
+    const app = composeService(compose, 'app');
+    const postgres = composeService(compose, 'postgres');
+    const redis = composeService(compose, 'redis');
+    const dockerfile = read('Dockerfile');
+    const nginx = read('deploy/nginx/nongxinzhijing.conf');
+
+    for (const name of [
+      'REDIS_URL',
+      'EMAIL_VERIFICATION_HMAC_SECRET',
+      'SMTP_HOST',
+      'SMTP_PORT',
+      'SMTP_SECURE',
+      'SMTP_USER',
+      'SMTP_PASS',
+      'SMTP_FROM_NAME',
+      'ADMIN_EMAIL',
+      'ADMIN_PASSWORD',
+    ]) {
+      if (name === 'REDIS_URL') {
+        expect(app).toMatch(/REDIS_URL:\s*["']?redis:\/\//);
+      } else if (name === 'ADMIN_EMAIL' || name === 'ADMIN_PASSWORD') {
+        expect(app).toMatch(/env_file:\s*\n\s*- \.env/);
+        expect(app).not.toMatch(new RegExp(`${name}:\\s*["']?\\$\\{${name}:\\?`));
+      } else {
+        expect(app).toMatch(new RegExp(`${name}:\\s*["']?\\$\\{${name}(?::[^}]*)?\\}`));
+      }
+      expect(postgres).not.toContain(name);
+      expect(redis).not.toContain(name);
+      expect(dockerfile).not.toMatch(new RegExp(`^ARG\\s+${name}\\b`, 'm'));
+      expect(nginx).not.toContain(name);
+    }
+  });
+
   it('terminates TLS in Nginx with WebSocket proxying, asset caching and auth throttling', () => {
     const nginx = read('deploy/nginx/nongxinzhijing.conf');
 
@@ -97,9 +132,10 @@ describe('production deployment contract', () => {
     expect(nginx).toMatch(/limit_req_zone\s+\$binary_remote_addr\s+zone=auth_login:[^;]+rate=5r\/m;/);
     expect(nginx).toMatch(/limit_req_zone\s+\$binary_remote_addr\s+zone=auth_refresh:[^;]+rate=30r\/m;/);
     expect(nginx).toMatch(/limit_req_status\s+429;/);
-    expect(nginx).toMatch(/location\s+~\s+\^\/api\/v1\/auth\/\(login\|register\)\$/);
+    expect(nginx).toMatch(/location\s+~\*\s+\^\/api\/v1\/auth\/\(login\|register\|email-code\|password-reset\)\/\?\$/);
+    expect(nginx).not.toMatch(/location\s+~\s+\^\/api\/v1\/auth/);
     expect(nginx).toMatch(/limit_req\s+zone=auth_login\s+burst=3\s+nodelay;/);
-    expect(nginx).toMatch(/location\s+=\s+\/api\/v1\/auth\/refresh/);
+    expect(nginx).toMatch(/location\s+~\*\s+\^\/api\/v1\/auth\/refresh\/\?\$/);
     expect(nginx).toMatch(/limit_req\s+zone=auth_refresh\s+burst=10\s+nodelay;/);
   });
 
@@ -167,13 +203,30 @@ describe('production deployment contract', () => {
 
     for (const name of [
       'DATABASE_URL', 'REDIS_URL', 'ACCESS_TOKEN_SECRET', 'ACCESS_TOKEN_TTL_SECONDS',
-      'REFRESH_TOKEN_TTL_SECONDS', 'ADMIN_USERNAME', 'ADMIN_PASSWORD', 'PAYMENT_MODE',
+      'REFRESH_TOKEN_TTL_SECONDS', 'ADMIN_EMAIL', 'ADMIN_PASSWORD', 'PAYMENT_MODE',
       'SAAS_COOKIE_SECURE', 'QWEN_API_KEY', 'ZHIPU_AI_KEY', 'POSTGRES_PASSWORD', 'REDIS_PASSWORD',
+      'EMAIL_VERIFICATION_HMAC_SECRET', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE',
+      'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM_NAME',
     ]) {
       expect(env).toMatch(new RegExp(`^${name}=`, 'm'));
     }
-    expect(env).not.toMatch(/JWT_SECRET|ADMIN_INITIAL_PASSWORD/);
+    expect(env).not.toMatch(/JWT_SECRET|ADMIN_INITIAL_PASSWORD|ADMIN_USERNAME/);
     expect(env).not.toMatch(/(?:sk-[A-Za-z0-9_-]{12,}|password123|changeme)/i);
+  });
+
+  it('provides an administrator-only SMTP smoke test without printing secrets', () => {
+    const manifest = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    const smokeTest = read('scripts/smtpSmokeTest.ts');
+
+    expect(manifest.scripts['build:smtp-smoke']).toContain('dist/smtp-smoke.mjs');
+    expect(manifest.scripts.build).toContain('build:smtp-smoke');
+    expect(manifest.scripts['smtp:smoke']).toBe('node dist/smtp-smoke.mjs');
+    expect(smokeTest).toContain('loadSmtpConfig');
+    expect(smokeTest).toContain('createSmtpVerificationMailer');
+    expect(smokeTest).toContain('runSmtpSmokeTest(process.env)');
+    expect(smokeTest).toContain('environment.ADMIN_EMAIL');
+    expect(smokeTest).toMatch(/to:\s*administratorEmail|email:\s*administratorEmail/);
+    expect(smokeTest).not.toMatch(/console\.(?:log|info|error)\([^)]*(?:SMTP_PASS|config|code)/);
   });
 
   it('never injects server-side AI provider credentials into the browser bundle', () => {
@@ -189,7 +242,7 @@ describe('production deployment contract', () => {
     for (const text of [
       'Ubuntu 22.04', '2 核 2 GB', 'www.nongxinzhijing.site', '安全组', 'HTTPS',
       '数据库迁移', '备份', '恢复演练', '故障处理', '5432', '6379',
-      '移除 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD`', '密码修改、找回与 MFA',
+      '移除 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD`', '邮箱找回密码',
       '`TRUST_PROXY=1`', '`TRUST_PROXY=loopback`',
       '宿主机 PostgreSQL', 'docker compose exec -T postgres',
       'Compose 备份不需要开放 5432',
@@ -201,6 +254,9 @@ describe('production deployment contract', () => {
       'gnupg git rsync', 'node_22.x',
       'PROJECT_DIR=', 'dropdb --if-exists',
       'Docker 管理权限的用户本身等同 root',
+      'smtp.qq.com', 'smtp.163.com', 'SMTP_PASS', '授权码',
+      'npm run smtp:smoke', '只发送到 `ADMIN_EMAIL`',
+      'docker compose run --rm --no-deps app node dist/smtp-smoke.mjs',
     ]) {
       expect(manual).toContain(text);
     }

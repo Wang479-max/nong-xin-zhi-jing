@@ -21,6 +21,7 @@ async function createLayout(): Promise<string> {
     writeFile(join(dist, 'server.cjs.map'), 'map'),
     writeFile(join(dist, 'migrate.mjs'), 'migrate'),
     writeFile(join(dist, 'migrate.mjs.map'), 'map'),
+    writeFile(join(dist, 'smtp-smoke.mjs'), 'smtp smoke'),
     writeFile(join(dist, 'migrations', '001_init.sql'), 'select 1;'),
   ]);
   return dist;

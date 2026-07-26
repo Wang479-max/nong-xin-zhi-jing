@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadEmailConfig } from '../../server/saas/email/config';
+import { loadEmailConfig, loadSmtpConfig } from '../../server/saas/email/config';
 
 const validEnvironment = {
   REDIS_URL: 'redis://:redis-password@127.0.0.1:6379',
@@ -13,6 +13,24 @@ const validEnvironment = {
 };
 
 describe('email verification configuration', () => {
+  it('loads SMTP settings independently for the pre-deployment smoke test', () => {
+    expect(loadSmtpConfig({
+      SMTP_HOST: validEnvironment.SMTP_HOST,
+      SMTP_PORT: validEnvironment.SMTP_PORT,
+      SMTP_SECURE: validEnvironment.SMTP_SECURE,
+      SMTP_USER: validEnvironment.SMTP_USER,
+      SMTP_PASS: validEnvironment.SMTP_PASS,
+      SMTP_FROM_NAME: validEnvironment.SMTP_FROM_NAME,
+    })).toEqual({
+      host: 'smtp.qq.com',
+      port: 465,
+      secure: true,
+      user: 'sender@qq.com',
+      pass: 'smtp-authorization-code',
+      fromName: '农芯智境',
+    });
+  });
+
   it('loads a valid QQ SMTP configuration with fixed verification limits', () => {
     expect(loadEmailConfig(validEnvironment)).toMatchObject({
       smtp: { host: 'smtp.qq.com', port: 465, secure: true, user: 'sender@qq.com' },
