@@ -1695,16 +1695,29 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
                 )}
 
                 {!isAnalyzing && (
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                    <div className="bg-white/20 backdrop-blur-md p-4 rounded-full text-white hover:bg-white/30 transition-all">
+                  <div className="absolute inset-0 flex items-center justify-center gap-4 bg-black/40 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      aria-label="重新选择图片"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white/20 p-4 text-white backdrop-blur-md transition-all hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-white"
+                    >
                       <Upload size={24} />
-                    </div>
-                    <div 
-                      onClick={(e) => { e.stopPropagation(); startCamera(); }}
-                      className="bg-white/20 backdrop-blur-md p-4 rounded-full text-white hover:bg-white/30 transition-all"
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="打开相机重新拍摄"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        startCamera();
+                      }}
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white/20 p-4 text-white backdrop-blur-md transition-all hover:bg-white/30 focus-visible:outline-2 focus-visible:outline-white"
                     >
                       <Camera size={24} />
-                    </div>
+                    </button>
                   </div>
                 )}
                 {!isAnalyzing && (

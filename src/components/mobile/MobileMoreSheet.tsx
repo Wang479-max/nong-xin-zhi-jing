@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { LogOut, Settings, X, type LucideIcon } from 'lucide-react';
+import { Bell, CloudSun, LogOut, Settings, X, type LucideIcon } from 'lucide-react';
 
 type NavigationItem = {
   id: string;
@@ -12,6 +12,9 @@ type MobileMoreSheetProps = {
   items: NavigationItem[];
   onClose: () => void;
   onNavigate: (id: string) => void;
+  onNotifications: () => void;
+  onWeather: () => void;
+  unreadCount: number;
   onSettings: () => void;
   onLogout: () => void;
 };
@@ -21,6 +24,9 @@ export default function MobileMoreSheet({
   items,
   onClose,
   onNavigate,
+  onNotifications,
+  onWeather,
+  unreadCount,
   onSettings,
   onLogout,
 }: MobileMoreSheetProps) {
@@ -83,6 +89,33 @@ export default function MobileMoreSheet({
           ))}
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-200 pt-4 dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => {
+              onNotifications();
+              onClose();
+            }}
+            className="relative flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-50 text-sm font-bold text-blue-700 focus-visible:outline-2 focus-visible:outline-blue-500 dark:bg-blue-500/10 dark:text-blue-300"
+          >
+            <Bell size={18} aria-hidden="true" />
+            通知
+            {unreadCount > 0 && (
+              <span className="absolute right-2 top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-black text-white">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onWeather();
+              onClose();
+            }}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-50 text-sm font-bold text-cyan-700 focus-visible:outline-2 focus-visible:outline-cyan-500 dark:bg-cyan-500/10 dark:text-cyan-300"
+          >
+            <CloudSun size={18} aria-hidden="true" />
+            天气
+          </button>
           <button
             type="button"
             onClick={() => {

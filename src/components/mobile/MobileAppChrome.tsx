@@ -20,6 +20,9 @@ type MobileAppChromeProps = {
   sections: MobileSection[];
   search: ReactNode;
   onCalendar: () => void;
+  onNotifications: () => void;
+  onWeather: () => void;
+  unreadCount: number;
   onNavigate: (id: string) => void;
   onSectionSelect: (id: string) => void;
   onSettings: () => void;
@@ -34,6 +37,9 @@ export default function MobileAppChrome({
   sections,
   search,
   onCalendar,
+  onNotifications,
+  onWeather,
+  unreadCount,
   onNavigate,
   onSectionSelect,
   onSettings,
@@ -56,6 +62,9 @@ export default function MobileAppChrome({
         items={secondaryItems}
         onClose={() => setMoreOpen(false)}
         onNavigate={onNavigate}
+        onNotifications={onNotifications}
+        onWeather={onWeather}
+        unreadCount={unreadCount}
         onSettings={onSettings}
         onLogout={onLogout}
       />

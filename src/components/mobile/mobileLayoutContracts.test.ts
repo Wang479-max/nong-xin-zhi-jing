@@ -62,4 +62,31 @@ describe('mobile module layout contracts', () => {
     expect(read('src/components/FarmCalendar.tsx')).toContain('max-h-[100dvh]');
     expect(read('src/components/AIAssistant.tsx')).toContain('inset-x-0 bottom-0');
   });
+
+  it('does not introduce unscoped fixed modal widths on phones', () => {
+    const files = [
+      'src/components/AIRecognition.tsx',
+      'src/components/ServiceMarket.tsx',
+      'src/components/SettingsModal.tsx',
+      'src/components/FarmCalendar.tsx',
+    ];
+
+    for (const file of files) {
+      const source = read(file);
+      expect(source).not.toMatch(/(?<!:)w-\[(?:4|5|6|7|8|9)\d{2}px\]/);
+    }
+  });
+
+  it('keeps hover actions directly available to touch users', () => {
+    expect(read('src/components/AIRecognition.tsx'))
+      .toContain('opacity-100 sm:opacity-0 sm:group-hover:opacity-100');
+    expect(read('src/components/FarmCalendar.tsx'))
+      .toContain('opacity-100 lg:opacity-0 lg:group-hover:opacity-100');
+  });
+
+  it('keeps notifications and weather reachable without the desktop header', () => {
+    expect(read('src/App.tsx')).toContain('<MobileNotificationsSheet');
+    expect(read('src/components/mobile/MobileMoreSheet.tsx')).toContain('onNotifications');
+    expect(read('src/components/mobile/MobileMoreSheet.tsx')).toContain('onWeather');
+  });
 });

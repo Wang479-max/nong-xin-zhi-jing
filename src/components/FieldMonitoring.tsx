@@ -2431,7 +2431,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
                 </div>
 
                 {/* PDF Document Wrapper for html-to-image (A4 aspect-ratio mockup) */}
-                <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-slate-200/50 dark:bg-slate-900/30">
+                <div className="flex-1 overflow-auto p-3 sm:p-8 flex justify-start sm:justify-center bg-slate-200/50 dark:bg-slate-900/30">
                   <div 
                     ref={reportRef}
                     className="w-[790px] bg-white text-slate-900 p-10 shadow-lg rounded-sm border border-slate-200/60 font-sans flex flex-col gap-6 relative shrink-0"

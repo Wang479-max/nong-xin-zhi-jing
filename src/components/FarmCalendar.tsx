@@ -524,8 +524,13 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                                 </div>
                               </div>
                             </div>
-                            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-2">
-                              <button onClick={(e) => handleDelete(act.id, e)} className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 rounded-xl transition-colors">
+                            <div className="absolute right-3 top-3 flex flex-col gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity lg:right-4 lg:top-4">
+                              <button
+                                type="button"
+                                aria-label="删除这条农事安排"
+                                onClick={(e) => handleDelete(act.id, e)}
+                                className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-500 transition-colors hover:bg-rose-500 hover:text-white focus-visible:outline-2 focus-visible:outline-rose-500 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
+                              >
                                 <Trash2 size={14} />
                               </button>
                             </div>
