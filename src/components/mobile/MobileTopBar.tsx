@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react';
-import { Map, User } from 'lucide-react';
+import { CalendarDays, Map, User } from 'lucide-react';
 
 type MobileTopBarProps = {
   title: string;
   search: ReactNode;
+  onCalendar: () => void;
   onAccount: () => void;
 };
 
 export default function MobileTopBar({
   title,
   search,
+  onCalendar,
   onAccount,
 }: MobileTopBarProps) {
   return (
@@ -21,6 +23,14 @@ export default function MobileTopBar({
         <div className="min-w-0 flex-1" aria-label={`${title}搜索`}>
           {search}
         </div>
+        <button
+          type="button"
+          aria-label="打开农事日历"
+          onClick={onCalendar}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 focus-visible:outline-2 focus-visible:outline-emerald-500 dark:bg-indigo-500/10 dark:text-indigo-300"
+        >
+          <CalendarDays size={20} aria-hidden="true" />
+        </button>
         <button
           type="button"
           aria-label="账户与设置"

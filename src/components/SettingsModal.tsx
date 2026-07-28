@@ -249,7 +249,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl glass-panel rounded-[48px] shadow-2xl z-50 overflow-hidden flex flex-col md:flex-row h-[650px] max-h-[90vh]"
+            className="fixed inset-0 flex h-[100dvh] md:h-auto w-full flex-col overflow-hidden rounded-none glass-panel shadow-2xl z-50 md:inset-auto md:top-1/2 md:left-1/2 md:min-h-[650px] md:max-h-[90vh] md:max-w-4xl md:-translate-x-1/2 md:-translate-y-1/2 md:flex-row md:rounded-[48px]"
           >
             {/* Main Modal Close Button (Desktop) */}
             <button 
@@ -260,9 +260,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
             </button>
 
             {/* Sidebar */}
-            <div className="w-full md:w-72 bg-slate-50/30 dark:bg-white/5 backdrop-blur-md p-8 border-r border-white/20 dark:border-white/5 flex flex-col">
-              <div className="flex items-center justify-between mb-10">
-                <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
+            <div className="flex w-full shrink-0 flex-col border-b border-white/20 bg-slate-50/30 p-3 backdrop-blur-md dark:border-white/5 dark:bg-white/5 md:w-72 md:border-b-0 md:border-r md:p-8">
+              <div className="mb-3 flex items-center justify-between md:mb-10">
+                <h2 className="flex items-center gap-3 text-lg font-black tracking-tight text-slate-900 dark:text-white md:text-2xl">
                   <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                     <Smartphone size={22} />
                   </div>
@@ -273,15 +273,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                 </button>
               </div>
               
-              <nav className="flex-1 space-y-3">
+              <nav className="mobile-scroll-row flex gap-2 md:flex-1 md:flex-col md:space-y-1">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      "w-full flex items-center gap-4 px-5 py-4 rounded-[24px] font-black transition-all duration-300 text-sm tracking-tight group",
+                      "flex min-h-11 shrink-0 items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black tracking-tight transition-all duration-300 group md:w-full md:gap-4 md:rounded-[24px] md:px-5 md:py-4 md:text-sm",
                       activeTab === tab.id 
-                        ? "bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 scale-105" 
+                        ? "bg-emerald-600 text-white shadow-xl shadow-emerald-500/20 md:scale-105" 
                         : "text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
                     )}
                   >
@@ -296,7 +296,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                 ))}
               </nav>
 
-              <div className="mt-auto pt-8 border-t border-white/20 dark:border-white/5">
+              <div className="mt-auto hidden border-t border-white/20 pt-8 dark:border-white/5 md:block">
                 <button 
                   onClick={onLogout}
                   className="w-full flex items-center gap-4 px-5 py-4 rounded-[24px] font-black text-sm text-red-500 hover:bg-red-500/10 transition-all duration-300 tracking-tight group"
@@ -308,7 +308,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 p-10 overflow-y-auto relative bg-white/40 dark:bg-black/20 backdrop-blur-sm custom-scrollbar">
+            <div className="relative flex-1 overflow-y-auto bg-white/40 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-sm custom-scrollbar dark:bg-black/20 sm:p-6 md:p-10">
 
               <div className="max-w-2xl mx-auto mt-4">
                 <AnimatePresence mode="wait">
@@ -362,7 +362,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                       </div>
 
                       <div className="space-y-6">
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                           <div className="space-y-2.5">
                             <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">用户名</label>
                             <input 
@@ -466,7 +466,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
 
                       <div className="space-y-6">
                         <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">{t('settings.theme.title')}</h4>
-                        <div className="grid grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 gap-4 min-[380px]:grid-cols-3 sm:gap-6">
                           {[
                             { id: 'light', label: t('settings.theme.light'), icon: <Palette size={24} className="text-amber-500" /> },
                             { id: 'dark', label: t('settings.theme.dark'), icon: <Palette size={24} className="text-indigo-500" /> },
@@ -502,7 +502,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
 
                       <div className="space-y-6 mt-8">
                         <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">{t('settings.language')}</h4>
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
                           {[
                             { id: 'zh', label: '简体中文', icon: <Globe size={24} className="text-emerald-500" /> },
                             { id: 'en', label: 'English', icon: <Globe size={24} className="text-blue-500" /> },

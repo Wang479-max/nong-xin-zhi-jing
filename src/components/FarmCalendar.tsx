@@ -83,6 +83,12 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
   }, []);
 
   useEffect(() => {
+    const openCalendar = () => setIsCalendarOpen(true);
+    window.addEventListener('open-farm-calendar', openCalendar);
+    return () => window.removeEventListener('open-farm-calendar', openCalendar);
+  }, []);
+
+  useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
@@ -167,18 +173,18 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
         key={day}
         onClick={() => handleDateClick(day)}
         className={cn(
-          "min-h-[80px] sm:min-h-[100px] p-2 border border-slate-100 dark:border-white/5 rounded-xl sm:rounded-2xl cursor-pointer transition-all duration-300 relative group overflow-hidden flex flex-col gap-1",
+          "min-h-[54px] sm:min-h-[100px] p-1 sm:p-2 border border-slate-100 dark:border-white/5 rounded-lg sm:rounded-2xl cursor-pointer transition-all duration-300 relative group overflow-hidden flex flex-col gap-1",
           isSelected ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-500 dark:border-emerald-500 shadow-md" : "bg-white dark:bg-[#0A0A0A] hover:bg-slate-50 dark:hover:bg-white/5"
         )}
       >
         <span className={cn(
-          "text-sm font-black w-7 h-7 flex items-center justify-center rounded-full z-10",
+          "text-xs sm:text-sm font-black w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full z-10",
           isSelected ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/30" : isToday ? "text-emerald-500" : "text-slate-700 dark:text-slate-300"
         )}>
           {day}
         </span>
         
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-1 relative z-10 max-h-[80px]">
+        <div className="relative z-10 hidden max-h-[80px] flex-1 space-y-1 overflow-y-auto no-scrollbar min-[390px]:block">
           {dayActivities.map(act => {
             const config = ACTIVITY_CONFIG[act.type];
             const Icon = config.icon;
@@ -217,7 +223,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
     <>
       <button
         onClick={() => setIsCalendarOpen(true)}
-        className="hidden sm:flex items-center gap-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-slate-100/50 dark:hover:bg-[#1A1A1A]/50 p-2.5 rounded-2xl transition-all border border-transparent hover:border-slate-200/50 dark:hover:border-white/10 hover:shadow-sm"
+        className="hidden items-center gap-3 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-slate-100/50 dark:hover:bg-[#1A1A1A]/50 p-2.5 rounded-2xl transition-all border border-transparent hover:border-slate-200/50 dark:hover:border-white/10 hover:shadow-sm md:flex"
       >
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-500 dark:text-indigo-400 shrink-0">
@@ -234,7 +240,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
       {createPortal(
         <AnimatePresence>
           {isCalendarOpen && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 md:p-8">
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 sm:p-6 md:p-8">
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -247,17 +253,17 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 20, scale: 0.95 }}
                 transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                className="relative w-full max-w-6xl h-full sm:h-[90vh] bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-3xl border border-white/50 dark:border-white/10 rounded-[32px] sm:rounded-[48px] shadow-2xl overflow-hidden flex flex-col z-10 text-slate-800 dark:text-slate-200"
+                className="relative z-10 flex h-[100dvh] max-h-[100dvh] w-full max-w-6xl flex-col overflow-hidden rounded-none border border-white/50 bg-white/95 text-slate-800 shadow-2xl backdrop-blur-3xl dark:border-white/10 dark:bg-[#0A0A0A]/95 dark:text-slate-200 sm:h-[90vh] sm:rounded-[48px]"
               >
               {/* Header */}
-              <div className="flex items-center justify-between p-6 sm:p-8 pb-6 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-black/20 shrink-0">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/50 p-3 dark:border-white/5 dark:bg-black/20 sm:p-8 sm:pb-6">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/20 sm:h-12 sm:w-12 sm:rounded-2xl">
                     <CalendarIcon size={24} className="text-white" />
                   </div>
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-none">农事实时日历与排盘</h2>
-                    <p className="text-[10px] sm:text-xs uppercase tracking-widest text-emerald-500 font-bold mt-2">
+                    <h2 className="text-base sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-none">农事实时日历与排盘</h2>
+                    <p className="hidden text-[10px] uppercase tracking-widest text-emerald-500 font-bold mt-2 sm:block sm:text-xs">
                       Farm Operations Calendar & Planning
                     </p>
                   </div>
@@ -368,7 +374,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                   </button>
                   <button 
                     onClick={() => setIsCalendarOpen(false)} 
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white dark:bg-white/5 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors border border-slate-100 dark:border-white/5 shadow-sm"
+                    className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-100 bg-white text-slate-400 shadow-sm transition-colors hover:text-slate-700 dark:border-white/5 dark:bg-white/5 dark:hover:text-white sm:h-12 sm:w-12 sm:rounded-2xl"
                   >
                     <X size={24} />
                   </button>
@@ -378,19 +384,19 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
               {/* Content Area */}
               <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col lg:flex-row">
                 {/* Left Column: Calendar Grid & Stats */}
-                <div className="flex-1 p-6 sm:p-8 flex flex-col gap-8 border-r border-slate-100 dark:border-white/5">
+                <div className="flex flex-1 flex-col gap-5 border-r border-slate-100 p-3 dark:border-white/5 sm:gap-8 sm:p-8">
                   
                   {/* Calendar Grid Container */}
-                  <div className="bg-slate-50/50 dark:bg-[#0A0A0A] border border-slate-200 dark:border-white/10 rounded-[32px] p-6 sm:p-8">
-                    <div className="flex items-center justify-between mb-8">
-                      <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-2 dark:border-white/10 dark:bg-[#0A0A0A] sm:rounded-[32px] sm:p-8">
+                    <div className="mb-3 flex items-center justify-between sm:mb-8">
+                      <h3 className="text-lg font-black uppercase tracking-widest text-slate-800 dark:text-slate-100 sm:text-2xl">
                         {year}年 {month + 1}月
                       </h3>
                       <div className="flex items-center gap-2">
-                        <button onClick={handlePrevMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shadow-sm">
+                        <button onClick={handlePrevMonth} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10">
                           <ChevronLeft size={18} />
                         </button>
-                        <button onClick={handleNextMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shadow-sm">
+                        <button onClick={handleNextMonth} className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10">
                           <ChevronRight size={18} />
                         </button>
                       </div>
@@ -406,7 +412,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
 
                     <div className="grid grid-cols-7 gap-1 sm:gap-2">
                       {paddingBefore.map(p => (
-                        <div key={`pad-${p}`} className="min-h-[80px] sm:min-h-[100px] rounded-xl sm:rounded-2xl" />
+                        <div key={`pad-${p}`} className="min-h-[54px] rounded-lg sm:min-h-[100px] sm:rounded-2xl" />
                       ))}
                       {days.map(renderDay)}
                     </div>
@@ -418,13 +424,13 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                       <span className="w-1.5 h-4 bg-emerald-500 rounded-full" />
                       本月农事统计月报
                     </h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
                       {stats.map(s => {
                         const config = ACTIVITY_CONFIG[s.type as ActivityType];
                         const Icon = config.icon;
                         return (
-                          <div key={s.type} className="p-4 rounded-3xl bg-slate-50/50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 flex items-center gap-4">
-                            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-inner", config.bg, config.color)}>
+                          <div key={s.type} className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/50 p-3 dark:border-white/5 dark:bg-white/[0.02] sm:gap-4 sm:rounded-3xl sm:p-4">
+                            <div className={cn("w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 shadow-inner", config.bg, config.color)}>
                               <Icon size={20} />
                             </div>
                             <div>
@@ -442,9 +448,9 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                 </div>
 
                 {/* Right Column: Selected Date Tasks */}
-                <div className="w-full lg:w-[400px] p-6 sm:p-8 bg-slate-50/30 dark:bg-transparent flex flex-col gap-6 shrink-0">
+                <div className="flex w-full shrink-0 flex-col gap-4 bg-slate-50/30 p-3 dark:bg-transparent sm:p-8 lg:w-[400px] lg:gap-6">
                   {/* Date Card */}
-                  <div className="bg-[#020617] rounded-[32px] p-8 text-white overflow-hidden relative shadow-2xl shrink-0">
+                  <div className="relative shrink-0 overflow-hidden rounded-2xl bg-[#020617] p-5 text-white shadow-2xl sm:rounded-[32px] sm:p-8">
                     <div className="absolute -top-20 -right-20 w-56 h-56 bg-emerald-500/20 blur-[60px] rounded-full pointer-events-none" />
                     
                     <div className="flex justify-between items-start">
@@ -541,7 +547,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
       {createPortal(
         <AnimatePresence>
           {isModalOpen && editingActivity && (
-            <div className="fixed inset-0 z-[300] flex items-center justify-center px-4">
+            <div className="fixed inset-0 z-[300] flex items-end justify-center px-0 sm:items-center sm:px-4">
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -553,7 +559,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="relative w-full max-w-md bg-white dark:bg-[#0A0A0A] border border-slate-200 dark:border-white/10 shadow-2xl rounded-[32px] overflow-hidden"
+                className="relative max-h-[100dvh] w-full max-w-md overflow-y-auto rounded-t-[28px] border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#0A0A0A] sm:max-h-[90vh] sm:rounded-[32px]"
               >
               <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                 <h3 className="font-black text-lg text-slate-900 dark:text-white tracking-tight">
@@ -573,7 +579,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                   }
                   setIsModalOpen(false);
                 }}
-                className="p-6 space-y-5"
+                className="space-y-5 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-6"
               >
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">农事类型 TYPE</label>
@@ -601,7 +607,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">日期 DATE</label>
                     <input 
@@ -624,7 +630,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">地块 LOCATION</label>
                     <input 

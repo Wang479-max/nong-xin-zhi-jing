@@ -1259,6 +1259,7 @@ function AppContent() {
               secondaryItems={mobileSecondaryItems}
               sections={mobileSections}
               search={<GlobalSearch mobile onNavigate={handleNavigate} user={user} />}
+              onCalendar={() => window.dispatchEvent(new CustomEvent('open-farm-calendar'))}
               onNavigate={handleNavigate}
               onSectionSelect={handleMobileSectionSelect}
               onSettings={() => setIsSettingsOpen(true)}

@@ -19,6 +19,7 @@ type MobileAppChromeProps = {
   secondaryItems: NavigationItem[];
   sections: MobileSection[];
   search: ReactNode;
+  onCalendar: () => void;
   onNavigate: (id: string) => void;
   onSectionSelect: (id: string) => void;
   onSettings: () => void;
@@ -32,6 +33,7 @@ export default function MobileAppChrome({
   secondaryItems,
   sections,
   search,
+  onCalendar,
   onNavigate,
   onSectionSelect,
   onSettings,
@@ -41,7 +43,7 @@ export default function MobileAppChrome({
 
   return (
     <>
-      <MobileTopBar title={title} search={search} onAccount={onSettings} />
+      <MobileTopBar title={title} search={search} onCalendar={onCalendar} onAccount={onSettings} />
       <MobileSectionTabs sections={sections} onSelect={onSectionSelect} />
       <MobileBottomNav
         activeTab={activeTab}

@@ -54,4 +54,12 @@ describe('mobile module layout contracts', () => {
     expect(read('src/components/NewsModule.tsx'))
       .toContain('w-full sm:w-96 md:w-[420px]');
   });
+
+  it('uses phone-safe secondary modules and floating tools', () => {
+    expect(read('src/components/ServiceMarket.tsx')).toContain('p-3 sm:p-6');
+    expect(read('src/components/Feedback.tsx')).toContain('p-3 sm:p-6');
+    expect(read('src/components/SettingsModal.tsx')).toContain('h-[100dvh] md:h-auto');
+    expect(read('src/components/FarmCalendar.tsx')).toContain('max-h-[100dvh]');
+    expect(read('src/components/AIAssistant.tsx')).toContain('inset-x-0 bottom-0');
+  });
 });
