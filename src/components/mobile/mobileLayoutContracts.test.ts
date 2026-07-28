@@ -47,4 +47,11 @@ describe('mobile module layout contracts', () => {
     expect(ai).toContain('data-mobile-table');
     expect(ai).toContain('data-label=');
   });
+
+  it('keeps knowledge and news content readable at narrow phone widths', () => {
+    expect(read('src/components/KnowledgeBase.tsx'))
+      .toContain('grid-cols-1 min-[380px]:grid-cols-2');
+    expect(read('src/components/NewsModule.tsx'))
+      .toContain('w-full sm:w-96 md:w-[420px]');
+  });
 });
