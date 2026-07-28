@@ -1032,10 +1032,21 @@ function AppContent() {
   }
 
   function handleMobileSectionSelect(sectionId: string) {
-    document.getElementById(sectionId)?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
+    if (sectionId === 'management-map') {
+      window.dispatchEvent(new CustomEvent('set-view-mode-3d'));
+      return;
+    }
+
+    if (sectionId.startsWith('management-')) {
+      window.dispatchEvent(new CustomEvent('set-view-mode-list'));
+    }
+
+    window.setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, sectionId.startsWith('management-') ? 120 : 0);
   }
 
   const handleUpdateUser = () => {

@@ -29,4 +29,14 @@ describe('mobile module layout contracts', () => {
     expect(source).toContain('id="dashboard-environment"');
     expect(source).toContain('grid-cols-2 sm:grid-cols-4');
   });
+
+  it('exposes phone-safe monitoring and field-management sections', () => {
+    const monitoring = read('src/components/FieldMonitoring.tsx');
+    const management = read('src/components/FieldManagement.tsx');
+
+    expect(monitoring).toContain('id="monitoring-trends"');
+    expect(monitoring).toContain('grid-cols-2 sm:grid-cols-3');
+    expect(management).toContain('id="management-fields"');
+    expect(management).toContain('grid-cols-1 sm:grid-cols-2 md:grid-cols-4');
+  });
 });
