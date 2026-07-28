@@ -43,6 +43,14 @@ describe('frontend security retirement scan', () => {
     expect(monitoring).not.toMatch(/from ['"]xlsx['"]/);
     expect(monitoring).toContain('await saveXlsxFile(');
   });
+
+  it('does not ship the vulnerable SheetJS package', () => {
+    const manifest = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+    };
+
+    expect(manifest.dependencies?.xlsx).toBeUndefined();
+  });
 });
 
 function sourceFiles(directory: string): string[] {
