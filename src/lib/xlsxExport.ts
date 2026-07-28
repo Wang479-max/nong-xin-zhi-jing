@@ -1,4 +1,4 @@
-import { saveAs } from 'file-saver';
+import saveAs from 'file-saver';
 import JSZip from 'jszip';
 
 export type XlsxCellValue = string | number | null | undefined;
