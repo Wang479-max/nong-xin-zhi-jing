@@ -2770,7 +2770,7 @@ function DayNightEnvironment({ droneX, isRaining }: { droneX: number, isRaining:
   );
 }
 
-export default function ThreeJsMicroView({ plots, activePlotId, onSelectPlot, viewMode, onControlHardware, onFertilize, hardwareStatus, realtimeData, aiResult, isImmersive }: DigitalTwinProps & { viewMode: string }) {
+export default function ThreeJsMicroView({ plots, activePlotId, onSelectPlot, viewMode, onControlHardware, onFertilize, hardwareStatus, realtimeData, aiResult, isImmersive, readOnly }: DigitalTwinProps & { viewMode: string }) {
   const [cameraPreset, setCameraPreset] = useState<string>('overview');
   const [isCruising, setIsCruising] = useState(false);
   const [showAnomalies, setShowAnomalies] = useState(false);
@@ -4261,7 +4261,7 @@ export default function ThreeJsMicroView({ plots, activePlotId, onSelectPlot, vi
               </div>
 
               {/* 智能联防执行机器控制 */}
-              <div>
+              <div className={readOnly ? 'hidden' : undefined}>
                 <span className="text-[9px] text-cyan-400 uppercase tracking-widest block mb-1.5 font-bold">⚙️ 智能联防核心设备控制</span>
                 <div className="flex flex-col gap-2 font-sans">
                   {/* Irrigation Control */}

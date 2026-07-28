@@ -1,26 +1,80 @@
-# 农芯智境 · 一键容器化部署
 services:
-  nong-xin-zhi-jing:
+  app:
     build: .
-    image: nong-xin-zhi-jing:latest
-    container_name: nxzj
+    image: nongxinzhijing:latest
     restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      # 接口限流阈值（每 IP 每分钟），可按压测目标调整
-      - RATE_LIMIT_PER_MIN=1200
-    # 从 .env 读取 AI 密钥（QWEN_API_KEY / ZHIPU_AI_KEY），密钥不入镜像
+    init: true
     env_file:
       - .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      TRUST_PROXY: "1"
+      USER_DATA_PATH: /app/.data
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-nxzj_app}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-agri_saas}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0"
+      EMAIL_VERIFICATION_HMAC_SECRET: "${EMAIL_VERIFICATION_HMAC_SECRET:?EMAIL_VERIFICATION_HMAC_SECRET is required}"
+      SMTP_HOST: "${SMTP_HOST:?SMTP_HOST is required}"
+      SMTP_PORT: "${SMTP_PORT:-465}"
+      SMTP_SECURE: "${SMTP_SECURE:-true}"
+      SMTP_USER: "${SMTP_USER:?SMTP_USER is required}"
+      SMTP_PASS: "${SMTP_PASS:?SMTP_PASS is required}"
+      SMTP_FROM_NAME: "${SMTP_FROM_NAME:-农芯智境}"
+    ports:
+      - "127.0.0.1:3000:3000"
     volumes:
-      # 持久化文件型数据库，容器重建不丢数据
-      - ./.data:/app/.data
+      - app_data:/app/.data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-agri_saas}
+      POSTGRES_USER: ${POSTGRES_USER:-nxzj_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  app_data:
+  postgres_data:
+  redis_data:

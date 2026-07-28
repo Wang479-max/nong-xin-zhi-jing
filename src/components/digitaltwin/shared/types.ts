@@ -14,6 +14,8 @@ export interface DigitalTwinProps {
   realtimeData: any;
   aiResult?: any;
   onExit?: () => void;
+  readOnly: boolean;
+  onUpgrade: () => void;
   isImmersive?: boolean;
   onToggleImmersive?: () => void;
 }

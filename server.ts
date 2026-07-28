@@ -7,12 +7,15 @@ import fs from 'fs';
 import os from 'os';
 import cron from 'node-cron';
 import { WebSocketServer, WebSocket } from 'ws';
+import { createSaasRuntimeFromEnv } from './server/saas/index.ts';
+import { createApiRateLimiter } from './server/saas/http/security.ts';
+import { legacyCommerceApiDisabled, legacyUserApiDisabled } from './server/saas/legacy.ts';
+import { resolveListenHost } from './server/listenHost.ts';
+import { resolveListenPort } from './server/listenPort.ts';
+import { handleListenFailure } from './server/listenFailure.ts';
+import { resolveTrustProxy } from './server/trustProxy.ts';
 import { getUnifiedCrawledKnowledge, REAL_DEEP_LINKED_FALLBACKS, REAL_TIANXING_FALLBACKS, generateExtendedNewsPool, PRESET_IMGS, crawlMoa, getDetailedContent } from './crawlerService.ts';
-import {
-  PLAN_DEFS, PRODUCTS, VALUE_SERVICES, PAYMENT_PROVIDERS,
-  normalizePlan, getPlanDef, getPlotLimit, getAiMonthlyQuota, planAllowsFeature,
-  type FeatureKey, type PaymentProviderId,
-} from './src/data/pricing.ts';
+import { getPlanDef, getPlotLimit, getAiMonthlyQuota } from './src/data/pricing.ts';
 
 // Handle both ESM and CJS environments
 const getDirname = () => {
@@ -156,8 +159,47 @@ function generateMockAIResult(type: string, plot: any) {
 export const app = express();
 
 async function startServer() {
-  // 优先使用环境变量指定的端口，未设置时默认 3000；若端口被占用则自动改用空闲端口。
-  const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+  // 优先使用环境变量指定的端口；仅开发环境在端口占用时自动改用空闲端口。
+  const PORT = resolveListenPort(process.env);
+  const HOST = resolveListenHost(process.env);
+
+  // Shared API protections must run before the versioned router can terminate a request.
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Permissions-Policy', 'geolocation=(self), microphone=(self), camera=(self)');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'; object-src 'none'; base-uri 'self'");
+    if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+      res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+    }
+    next();
+  });
+
+  const trustProxyMode = resolveTrustProxy(process.env);
+  if (trustProxyMode !== false) app.set('trust proxy', trustProxyMode);
+  const RATE_MAX = Number(process.env.RATE_LIMIT_PER_MIN || 1200);
+  const RATE_BUCKET_MAX = Number(process.env.RATE_LIMIT_MAX_BUCKETS || 10_000);
+  app.use('/api', createApiRateLimiter({
+    limit: RATE_MAX,
+    windowMs: 60 * 1_000,
+    maxBuckets: RATE_BUCKET_MAX,
+    trustProxy: trustProxyMode !== false,
+  }));
+
+  app.use((req, res, next) => {
+    if (!req.path.startsWith('/api')) return next();
+    const start = process.hrtime.bigint();
+    res.on('finish', () => {
+      const ms = Number(process.hrtime.bigint() - start) / 1e6;
+      if (ms > 800) console.warn(`[Perf] 慢接口 ${req.method} ${req.originalUrl} ${ms.toFixed(0)}ms -> ${res.statusCode}`);
+    });
+    next();
+  });
+
+  const saasRuntime = await createSaasRuntimeFromEnv(process.env);
+  app.use('/api/v1', saasRuntime.router);
 
   // Use /tmp for serverless environments (Vercel, EdgeOne, etc.)
   // If process.env.USER_DATA_PATH is provided (e.g., by Electron), prioritize it.
@@ -196,8 +238,8 @@ async function startServer() {
   }
 
   // AI API Keys and Cache
-  const QWEN_API_KEY = process.env.QWEN_API_KEY || 'sk-23b6e78af2564710978297606b56f57d';
-  const ZHIPU_API_KEY = process.env.ZHIPU_AI_KEY || 'd0e6728683544915924b00441d494956.Gkw6q9pqixeWugia';
+  const QWEN_API_KEY = process.env.QWEN_API_KEY?.trim() || '';
+  const ZHIPU_API_KEY = process.env.ZHIPU_AI_KEY?.trim() || '';
   const aiCache = new Map<string, { data: any, timestamp: number }>();
   const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
   const CACHE_VERSION = 'v2'; // Increment this when changing response structure
@@ -205,65 +247,6 @@ async function startServer() {
   // Increase payload limit for base64 image uploads
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
-
-  // ==========================================================================
-  // 安全与健壮性中间件（4C 评审：技-安全防护 / 健-系统稳定性）
-  // ==========================================================================
-
-  // 1) 安全响应头：防点击劫持、MIME 嗅探、跨域信息泄露（不设严格 CSP 以兼容 Cesium/Worker/WASM）
-  app.use((req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Permissions-Policy', 'geolocation=(self), microphone=(self), camera=(self)');
-    // 仅启用不影响脚本/样式/Worker 加载的安全指令，避免误伤 3D 与可视化资源
-    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'; object-src 'none'; base-uri 'self'");
-    if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
-      res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
-    }
-    next();
-  });
-
-  // 2) 轻量级 IP 限流（滑动窗口，内存级）：防接口刷量 / DoS，保障并发稳定
-  const RATE_WINDOW_MS = 60 * 1000;
-  const RATE_MAX = Number(process.env.RATE_LIMIT_PER_MIN || 1200); // 每 IP 每分钟上限（演示宽松）
-  const rateBuckets = new Map<string, number[]>();
-  setInterval(() => {
-    const cutoff = Date.now() - RATE_WINDOW_MS;
-    for (const [ip, hits] of rateBuckets) {
-      const kept = hits.filter((t) => t > cutoff);
-      if (kept.length) rateBuckets.set(ip, kept); else rateBuckets.delete(ip);
-    }
-  }, RATE_WINDOW_MS).unref?.();
-
-  app.use('/api', (req, res, next) => {
-    if (req.path === '/health') return next(); // 健康检查不限流
-    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || req.socket.remoteAddress || 'unknown';
-    const now = Date.now();
-    const hits = (rateBuckets.get(ip) || []).filter((t) => t > now - RATE_WINDOW_MS);
-    hits.push(now);
-    rateBuckets.set(ip, hits);
-    const remaining = Math.max(0, RATE_MAX - hits.length);
-    res.setHeader('X-RateLimit-Limit', String(RATE_MAX));
-    res.setHeader('X-RateLimit-Remaining', String(remaining));
-    if (hits.length > RATE_MAX) {
-      res.setHeader('Retry-After', '60');
-      return res.status(429).json({ success: false, error: '请求过于频繁，请稍后再试', code: 'RATE_LIMITED' });
-    }
-    next();
-  });
-
-  // 3) 接口耗时埋点：慢请求(>800ms)落日志，便于性能瓶颈定位与优化
-  app.use((req, res, next) => {
-    if (!req.path.startsWith('/api')) return next();
-    const start = process.hrtime.bigint();
-    res.on('finish', () => {
-      const ms = Number(process.hrtime.bigint() - start) / 1e6;
-      if (ms > 800) console.warn(`[Perf] 慢接口 ${req.method} ${req.originalUrl} ${ms.toFixed(0)}ms -> ${res.statusCode}`);
-    });
-    next();
-  });
 
   // --- 模拟后端数据库/硬件状态 ---
   let users: any[] = [];
@@ -278,10 +261,6 @@ async function startServer() {
   };
   let knowledgePool: any[] = [];
   let newsPools: { mara: any[], tianxing: any[], gov: any[] } = { mara: [], tianxing: [], gov: [] };
-  // --- 商业模式（订阅/硬件/增值服务）状态 ---
-  let orders: any[] = [];
-  // commerceDemo=true 时：门控以「演示模式」放行（不卡地块数/不卡 AI 配额），便于现场演示
-  let commerceSettings: { commerceDemo: boolean } = { commerceDemo: false };
 
   // Load data from file with robust retry and fallback mechanism
   const loadDatabase = (retryCount = 3) => {
@@ -313,10 +292,6 @@ async function startServer() {
           }
           if (data.newsPools && typeof data.newsPools === 'object') {
             newsPools = data.newsPools;
-          }
-          if (Array.isArray(data.orders)) orders = data.orders;
-          if (data.commerceSettings && typeof data.commerceSettings === 'object') {
-            commerceSettings = { ...commerceSettings, ...data.commerceSettings };
           }
           console.log(`[DB] Loaded data from ${DB_FILE}`);
           return true;
@@ -521,7 +496,7 @@ async function startServer() {
     saveTimeout = setTimeout(async () => {
       try {
         const dataToSave = JSON.stringify({
-          users, plots, systemLogs, feedbackList, recognitionHistory, customRules, globalConfig, knowledgePool, newsPools, orders, commerceSettings
+          users, plots, systemLogs, feedbackList, recognitionHistory, customRules, globalConfig, knowledgePool, newsPools
         }, null, 2);
         await fs.promises.writeFile(DB_FILE, dataToSave, 'utf-8');
       } catch (err) {
@@ -552,7 +527,6 @@ async function startServer() {
     users = [
       { 
         username: 'admin', 
-        password: 'password123', 
         role: '管理员',
         plan: '企业版',
         aiRecognitionCount: 0,
@@ -1480,8 +1454,8 @@ async function startServer() {
   app.post('/api/plots', (req, res) => {
     const { name, area, crop, nextTillageDate, username, plantingDate, expectedHarvestDate } = req.body;
 
-    // 套餐地块数量门控（演示模式下放行）
-    if (!commerceSettings.commerceDemo && username) {
+    // 套餐地块数量门控
+    if (username) {
       const user = users.find(u => u.username === username);
       const plan = user?.role === '管理员' ? '企业版' : (user?.plan || '基础版');
       const limit = getPlotLimit(plan);
@@ -1543,176 +1517,7 @@ async function startServer() {
     res.json(newPlot);
   });
 
-  // ===================================================================
-  // 商业模式接口：① SaaS 订阅 ② 硬件销售 ③ 增值服务（含模拟支付 + 真实支付占位）
-  // ===================================================================
-
-  const PLAN_NAME_BY_ID: Record<string, string> = { free: '基础版', pro: '专业版', enterprise: '企业版' };
-
-  // 计算用户权益快照
-  const computeEntitlements = (username?: string) => {
-    const user = username ? users.find(u => u.username === username) : null;
-    const rawPlan = user?.role === '管理员' ? '企业版' : (user?.plan || '基础版');
-    const def = getPlanDef(rawPlan);
-    if (user) ensureQuotaMonth(user);
-    const plotsOwned = username ? Object.values(plots).filter((p: any) => p.owner === username).length : 0;
-    return {
-      username: username || null,
-      planId: def.id,
-      planName: def.name,
-      planExpiry: user?.planExpiry || null,
-      commerceDemo: commerceSettings.commerceDemo,
-      features: def.features,
-      plotLimit: def.plotLimit,
-      plotsOwned,
-      aiMonthlyQuota: def.aiMonthlyQuota,
-      aiUsedThisMonth: user?.aiRecognitionCount || 0,
-      subscriptions: user?.subscriptions || [],
-      purchasedServices: user?.purchasedServices || [],
-      hasAdvancedAiPack: !!(user?.purchasedServices || []).some((s: any) =>
-        s.unlocks === 'advanced-ai-pack' && (!s.expiry || new Date(s.expiry) > new Date())),
-    };
-  };
-
-  // 真实支付提供商占位：未启用时回退模拟支付
-  const createPaymentIntent = (provider: PaymentProviderId, order: any) => {
-    const cfg = PAYMENT_PROVIDERS.find(p => p.id === provider);
-    // 模拟支付：直接生成交易号并即时结算
-    if (!cfg || provider === 'mock') {
-      return { provider: 'mock' as PaymentProviderId, transactionId: `MOCK_${Date.now()}`, autoSettle: true, payUrl: null, gateway: null };
-    }
-    // 真实支付（微信/支付宝）：占位下单，返回支付链接，等待回调结算。
-    // 实际接入时在此调用 cfg.gateway 真实下单并返回 payUrl / 二维码。
-    return { provider, transactionId: `${provider.toUpperCase()}_${Date.now()}`, autoSettle: false, payUrl: `${cfg.gateway}?out_trade_no=${order.id}&total=${order.amount}`, gateway: cfg.gateway };
-  };
-
-  // 应用订单权益（支付成功后）
-  const applyOrderEntitlement = (order: any) => {
-    const user = users.find(u => u.username === order.username);
-    if (!user) return;
-    if (order.type === 'subscription') {
-      const planId = order.meta?.planId || 'pro';
-      user.plan = PLAN_NAME_BY_ID[planId] || '专业版';
-      const years = order.meta?.years || 1;
-      const base = user.planExpiry && new Date(user.planExpiry) > new Date() ? new Date(user.planExpiry) : new Date();
-      base.setFullYear(base.getFullYear() + years);
-      user.planExpiry = base.toISOString();
-      const plotIds: string[] = order.meta?.plotIds || [];
-      user.subscriptions = user.subscriptions || [];
-      plotIds.forEach(pid => {
-        const exist = user.subscriptions.find((s: any) => s.plotId === pid);
-        if (exist) exist.expiry = user.planExpiry;
-        else user.subscriptions.push({ plotId: pid, planId, expiry: user.planExpiry });
-      });
-    } else if (order.type === 'service') {
-      user.purchasedServices = user.purchasedServices || [];
-      order.items.forEach((it: any) => {
-        const svc = VALUE_SERVICES.find(s => s.id === it.refId);
-        const entry: any = { serviceId: it.refId, name: it.name, orderId: order.id, at: new Date().toISOString() };
-        if (svc?.unlocks) {
-          entry.unlocks = svc.unlocks;
-          if (svc.billing === 'monthly') {
-            const exp = new Date(); exp.setMonth(exp.getMonth() + 1); entry.expiry = exp.toISOString();
-          }
-        }
-        user.purchasedServices.push(entry);
-      });
-    }
-  };
-
-  const settleOrder = (order: any) => {
-    order.status = 'paid';
-    order.paidAt = new Date().toISOString();
-    applyOrderEntitlement(order);
-    addLog('system', `订单 ${order.id} 支付成功（¥${order.amount}）`, 'success');
-    saveData();
-  };
-
-  // 商品 / 套餐 / 服务目录
-  app.get('/api/store/catalog', (_req, res) => {
-    res.json({ plans: PLAN_DEFS, products: PRODUCTS, services: VALUE_SERVICES, paymentProviders: PAYMENT_PROVIDERS });
-  });
-
-  // 当前用户权益快照
-  app.get('/api/commerce/me', (req, res) => {
-    res.json(computeEntitlements(req.query.username as string | undefined));
-  });
-
-  // 我的订单
-  app.get('/api/commerce/orders', (req, res) => {
-    const { username } = req.query;
-    res.json(orders.filter(o => !username || o.username === username).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)));
-  });
-
-  // 演示模式开关（门控一键切换）
-  app.get('/api/commerce/demo', (_req, res) => res.json({ commerceDemo: commerceSettings.commerceDemo }));
-  app.post('/api/commerce/demo', (req, res) => {
-    commerceSettings.commerceDemo = !!req.body.enabled;
-    saveData();
-    addLog('system', `商业演示模式已${commerceSettings.commerceDemo ? '开启（门控放行）' : '关闭（门控生效）'}`, 'info');
-    res.json({ commerceDemo: commerceSettings.commerceDemo });
-  });
-
-  // 统一下单接口（订阅 / 硬件 / 增值服务）
-  app.post('/api/commerce/orders', (req, res) => {
-    const { username, type, provider = 'mock' } = req.body || {};
-    if (!username) return res.status(400).json({ error: '缺少用户信息' });
-    if (!['subscription', 'hardware', 'service'].includes(type)) return res.status(400).json({ error: '订单类型不合法' });
-
-    let items: any[] = [];
-    let meta: any = {};
-
-    if (type === 'subscription') {
-      const planId = req.body.planId;
-      const def = PLAN_DEFS.find(p => p.id === planId);
-      if (!def || def.id === 'free') return res.status(400).json({ error: '请选择有效的付费套餐' });
-      if (def.id === 'enterprise') return res.status(400).json({ error: '企业版为定制报价，请通过「联系商务」洽谈', code: 'CONTACT_SALES' });
-      const plotIds: string[] = Array.isArray(req.body.plotIds) ? req.body.plotIds : [];
-      const years = Math.max(1, Number(req.body.years) || 1);
-      const qty = Math.max(1, plotIds.length || Number(req.body.qty) || 1);
-      items = [{ refId: def.id, name: `${def.name} × ${qty}地块 × ${years}年`, qty: qty * years, unitPrice: def.pricePerPlotPerYear }];
-      meta = { planId: def.id, plotIds, years };
-    } else {
-      const reqItems = Array.isArray(req.body.items) ? req.body.items : [];
-      const catalog = type === 'hardware' ? PRODUCTS : VALUE_SERVICES;
-      items = reqItems.map((it: any) => {
-        const found: any = catalog.find((c: any) => c.id === it.refId);
-        if (!found) return null;
-        return { refId: found.id, name: found.name, qty: Math.max(1, Number(it.qty) || 1), unitPrice: found.price };
-      }).filter(Boolean);
-      if (items.length === 0) return res.status(400).json({ error: '订单明细为空或商品不存在' });
-    }
-
-    const amount = items.reduce((s, it) => s + it.unitPrice * it.qty, 0);
-    const order: any = {
-      id: `ORD${Date.now()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
-      username, type, items, amount, currency: 'CNY',
-      status: 'pending', provider, createdAt: new Date().toISOString(), meta,
-    };
-
-    const intent = createPaymentIntent(provider, order);
-    order.provider = intent.provider;
-    order.transactionId = intent.transactionId;
-    orders.push(order);
-
-    if (intent.autoSettle) {
-      settleOrder(order); // 模拟支付即时结算
-      return res.json({ order, entitlements: computeEntitlements(username), payment: { settled: true, mock: true } });
-    }
-    // 真实支付占位：返回支付链接，等待 /api/payments/notify 回调结算
-    saveData();
-    res.json({ order, payment: { settled: false, payUrl: intent.payUrl, gateway: intent.gateway, provider: intent.provider } });
-  });
-
-  // 真实支付回调占位（接入真实网关后由其异步通知；此处供演示手动触发结算）
-  app.post('/api/payments/notify', (req, res) => {
-    const { orderId } = req.body || {};
-    const order = orders.find(o => o.id === orderId);
-    if (!order) return res.status(404).json({ error: '订单不存在' });
-    if (order.status === 'paid') return res.json({ ok: true, order });
-    settleOrder(order);
-    res.json({ ok: true, order, entitlements: computeEntitlements(order.username) });
-  });
+  app.use(['/api/commerce', '/api/store', '/api/payments'], legacyCommerceApiDisabled);
 
   // --- 预警规则接口 ---
   app.get('/api/rules', (req, res) => {
@@ -1966,9 +1771,6 @@ async function startServer() {
 
     const user = users.find(u => u.username === username);
     if (!user) return { allowed: true, isSharedQuota: true };
-
-    // 演示模式：放行所有配额，便于现场演示
-    if (commerceSettings.commerceDemo) return { allowed: true, isSharedQuota: true };
 
     const plan = user.role === '管理员' ? '企业版' : (user.plan || '基础版');
     const quota = getAiMonthlyQuota(plan);
@@ -2516,7 +2318,7 @@ async function startServer() {
       let resultText = "";
       
       let finalReportResponse;
-      const activeQwenKey = process.env.QWEN_API_KEY || 'sk-23b6e78af2564710978297606b56f57d';
+      const activeQwenKey = process.env.QWEN_API_KEY?.trim() || '';
       const traceId = crypto.randomUUID();
 
       if (!isZhipuMissing) {
@@ -2884,7 +2686,7 @@ async function startServer() {
 
       res.json({ text: resultText, _optimizationTriggered: data._optimizationTriggered });
     } catch (error: any) {
-      const isNetworkIssue = error.message?.includes('网络优化') || error.message?.includes('网络波动') || error.message?.includes('超时') || error.message?.includes('fetch failed');
+      const isNetworkIssue = !activeZhipuKey || error.message?.includes('网络优化') || error.message?.includes('网络波动') || error.message?.includes('超时') || error.message?.includes('fetch failed');
       
       if (isNetworkIssue) {
         console.log(`[AI Chat] Applying connectivity fallback (Reason: ${error.message})`);
@@ -2906,7 +2708,8 @@ async function startServer() {
     }
 
     try {
-      const activeQwenKey = process.env.QWEN_API_KEY || 'sk-23b6e78af2564710978297606b56f57d';
+      const activeQwenKey = process.env.QWEN_API_KEY?.trim() || '';
+      if (!activeQwenKey) throw new Error('QWEN_API_KEY is not configured.');
       const prompt = `你是一个专业的智能农业AI助手。请听取这段田间巡视语音备忘录，并完成以下任务：
 1. 准确将语音内容转录为文本。如果录音背景有嘈杂声，请过滤并提取核心表达。
 2. 将转录出的内容进行深度分析，并生成一份极其专业、结构化、美观的高可读性田间巡检诊断报告。
@@ -2954,7 +2757,7 @@ async function startServer() {
       const parsedResult = JSON.parse(responseText);
       res.json({ success: true, ...parsedResult });
     } catch (error: any) {
-      const isNetworkIssue = error.message?.includes('网络优化') || error.message?.includes('网络波动') || error.message?.includes('超时') || error.message?.includes('fetch failed');
+      const isNetworkIssue = !process.env.QWEN_API_KEY?.trim() || error.message?.includes('网络优化') || error.message?.includes('网络波动') || error.message?.includes('超时') || error.message?.includes('fetch failed');
       
       if (isNetworkIssue) {
         console.log(`[Voice Memo] Applying connectivity fallback (Reason: ${error.message})`);
@@ -2994,164 +2797,27 @@ async function startServer() {
     }
   });
 
-  app.post('/api/auth/login', (req, res) => {
-    const { username, password } = req.body;
-    const user = users.find(u => u.username === username && u.password === password);
-    if (user) {
-      const { password, ...userWithoutPassword } = user;
-      res.json({ success: true, user: userWithoutPassword, token: 'mock-token' });
-    } else {
-      res.status(401).json({ success: false, message: '账号或密码错误' });
-    }
+  app.post('/api/auth/login', (_req, res) => {
+    res.status(410).json({
+      success: false,
+      error: {
+        code: 'LEGACY_AUTH_DISABLED',
+        message: 'This endpoint is disabled. Use /api/v1/auth/login.',
+      },
+    });
   });
 
-  app.post('/api/auth/register', (req, res) => {
-    const { username, password, role } = req.body;
-    if (users.find(u => u.username === username)) {
-      return res.status(400).json({ success: false, message: '用户名已存在' });
-    }
-    const newUser = { 
-      username, 
-      password, 
-      role: role || '普通用户',
-      name: username,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-      bio: '这位农友很懒，还没有填写简介。',
-      phone: '',
-      email: '',
-      location: '',
-      joinDate: new Date().toISOString().split('T')[0],
-      securityLogs: [{ event: '账号注册', time: new Date().toISOString(), ip: '127.0.0.1' }],
-      favorites: [],
-      twoFactorEnabled: false,
-      plan: 'free',
-      aiRecognitionCount: 0
-    };
-    users.push(newUser); saveData();
-    const { password: _, ...userWithoutPassword } = newUser;
-    res.json({ success: true, user: userWithoutPassword, token: 'mock-token' });
+  app.post('/api/auth/register', (_req, res) => {
+    res.status(410).json({
+      success: false,
+      error: {
+        code: 'LEGACY_AUTH_DISABLED',
+        message: 'This endpoint is disabled. Use /api/v1/auth/register.',
+      },
+    });
   });
 
-  // --- 2FA 验证接口 ---
-  app.post('/api/user/security/2fa/enable', (req, res) => {
-    const { username } = req.body;
-    const user = users.find(u => u.username === username);
-    if (user) {
-      (user as any).twoFactorEnabled = true;
-      (user as any).securityLogs.unshift({
-        event: '开启双重身份验证',
-        time: new Date().toISOString(),
-        ip: req.ip || '127.0.0.1'
-      });
-      res.json({ success: true, message: '双重身份验证已开启' });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/security/2fa/disable', (req, res) => {
-    const { username } = req.body;
-    const user = users.find(u => u.username === username);
-    if (user) {
-      (user as any).twoFactorEnabled = false;
-      (user as any).securityLogs.unshift({
-        event: '关闭双重身份验证',
-        time: new Date().toISOString(),
-        ip: req.ip || '127.0.0.1'
-      });
-      res.json({ success: true, message: '双重身份验证已关闭' });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-  app.get('/api/user/profile', (req, res) => {
-    // In a real app, we'd get the user from the token
-    const username = req.query.username as string || 'admin';
-    const user = users.find(u => u.username === username);
-    if (user) {
-      const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/avatar', (req, res) => {
-    const { username, avatar } = req.body;
-    const userIndex = users.findIndex(u => u.username === username);
-    if (userIndex > -1) {
-      users[userIndex].avatar = avatar; saveData();
-      users[userIndex].securityLogs.unshift({ event: '更新头像', time: new Date().toISOString(), ip: '127.0.0.1' });
-      res.json({ success: true, avatarUrl: avatar });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/profile', (req, res) => {
-    const { username, ...profileData } = req.body;
-    const userIndex = users.findIndex(u => u.username === username);
-    if (userIndex > -1) {
-      users[userIndex] = { ...users[userIndex], ...profileData }; saveData();
-      const { password, ...userWithoutPassword } = users[userIndex];
-      res.json(userWithoutPassword);
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/security/password', (req, res) => {
-    const { username, oldPassword, newPassword } = req.body;
-    const userIndex = users.findIndex(u => u.username === username);
-    if (userIndex > -1) {
-      if (users[userIndex].password === oldPassword) {
-        users[userIndex].password = newPassword; saveData();
-        users[userIndex].securityLogs.unshift({ event: '修改密码', time: new Date().toISOString(), ip: '127.0.0.1' });
-        res.json({ success: true });
-      } else {
-        res.status(400).json({ success: false, message: '原密码错误' });
-      }
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  // --- 收藏夹接口 ---
-  app.get('/api/user/favorites', (req, res) => {
-    const username = req.query.username as string || 'admin';
-    const user = users.find(u => u.username === username);
-    if (user) {
-      const favoriteArticles = knowledgePool.filter(a => user.favorites.includes(a.id));
-      res.json(favoriteArticles);
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.post('/api/user/favorites', (req, res) => {
-    const { username = 'admin', articleId } = req.body;
-    const user = users.find(u => u.username === username);
-    if (user) {
-      if (!user.favorites.includes(articleId)) {
-        user.favorites.push(articleId); saveData();
-      }
-      res.json({ success: true, favorites: user.favorites });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
-
-  app.delete('/api/user/favorites/:id', (req, res) => {
-    const { id } = req.params;
-    const username = req.query.username as string || 'admin';
-    const user = users.find(u => u.username === username);
-    if (user) {
-      user.favorites = user.favorites.filter(fid => fid !== id); saveData();
-      res.json({ success: true, favorites: user.favorites });
-    } else {
-      res.status(404).json({ error: '用户未找到' });
-    }
-  });
+  app.use('/api/user', legacyUserApiDisabled);
 
   // --- 用户反馈接口 ---
   app.post('/api/feedback', (req, res) => {
@@ -3223,7 +2889,7 @@ async function startServer() {
     });
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
-    const staticPath = _dirname.includes('dist') ? _dirname : distPath;
+    const staticPath = path.join(distPath, 'public');
     app.use(express.static(staticPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(staticPath, 'index.html'));
@@ -3311,18 +2977,28 @@ async function startServer() {
     }
   };
 
-  // Always listen in development and production to ensure the service is bound
-  const server = app.listen(PORT as number, '0.0.0.0', () => attachServerHandlers(server));
+  let activeServer: import('http').Server;
+  const listenOnPort = (port: number, allowDevelopmentFallback: boolean): import('http').Server => {
+    const candidate = app.listen(port, HOST, () => attachServerHandlers(candidate));
+    activeServer = candidate;
+    candidate.on('error', (error: unknown) => {
+      void handleListenFailure(error, {
+        production: process.env.NODE_ENV === 'production',
+        allowDevelopmentFallback,
+        closeRuntime: () => saasRuntime.close(),
+        exit: (code) => process.exit(code),
+        logError: (message, detail) => console.error(message, detail ?? ''),
+      }).then((action) => {
+        if (action !== 'retry-random-port') return;
+        console.warn(`[Server] 端口 ${PORT} 已被占用，正在尝试自动分配空闲端口...`);
+        listenOnPort(0, false);
+      });
+    });
+    return candidate;
+  };
 
-  // 端口被占用时，自动改用系统分配的空闲端口，避免直接崩溃。
-  server.on('error', (err: any) => {
-    if (err && err.code === 'EADDRINUSE') {
-      console.warn(`[Server] 端口 ${PORT} 已被占用，正在尝试自动分配空闲端口...`);
-      const fallback = app.listen(0, '0.0.0.0', () => attachServerHandlers(fallback));
-    } else {
-      console.error('[Server] 启动失败:', err);
-    }
-  });
+  // 开发环境只允许一次空闲端口回退；所有其他监听失败均关闭运行时并退出。
+  activeServer = listenOnPort(PORT, true);
 
   // ==========================================================================
   // 进程级稳定性兜底（4C 评审：健-长时间运行不崩溃）
@@ -3336,24 +3012,35 @@ async function startServer() {
   });
 
   let shuttingDown = false;
-  const gracefulShutdown = (signal: string) => {
+  const gracefulShutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[Server] 收到 ${signal}，开始优雅关闭...`);
     try { wss?.clients.forEach((c) => c.close()); } catch {}
-    server.close(() => {
-      console.log('[Server] 已关闭 HTTP 服务，进程退出。');
-      process.exit(0);
+    const httpClosed = new Promise<void>((resolve) => {
+      activeServer.close(() => resolve());
     });
-    // 兜底：5s 内未正常关闭则强制退出
-    setTimeout(() => process.exit(0), 5000).unref?.();
+    const forceExitTimer = setTimeout(() => process.exit(0), 5000);
+    forceExitTimer.unref?.();
+    try {
+      await saasRuntime.close();
+    } catch {
+      console.error('[Server] SaaS runtime shutdown failed.');
+    }
+    await httpClosed;
+    clearTimeout(forceExitTimer);
+    console.log('[Server] 已关闭 HTTP 服务，进程退出。');
+    process.exit(0);
   };
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => { void gracefulShutdown('SIGTERM'); });
+  process.on('SIGINT', () => { void gracefulShutdown('SIGINT'); });
 
   return app;
 }
 
-startServer();
+void startServer().catch(() => {
+  console.error('[Server] Startup failed.');
+  process.exitCode = 1;
+});
 
 export default app;

@@ -30,6 +30,13 @@ export default function DigitalTwin(props: DigitalTwinProps) {
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-black font-sans text-white">
+      {props.readOnly && (
+        <div className="absolute left-1/2 top-4 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-xl border border-amber-300/50 bg-slate-950/90 px-4 py-2 text-xs shadow-xl">
+          <span className="font-bold text-amber-300">基础预览</span>
+          <span className="text-slate-300">可浏览 3D 农场和切换地块；设备控制与精准施肥需升级。</span>
+          <button onClick={props.onUpgrade} className="rounded-lg bg-amber-400 px-3 py-1 font-bold text-slate-950 hover:bg-amber-300">升级</button>
+        </div>
+      )}
       {/* 引擎层 */}
       <div className={`absolute inset-0 transition-opacity duration-1000 ${viewMode === 'macro' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
         <CesiumMacroView {...props} viewMode={viewMode} isImmersive={isImmersive} />

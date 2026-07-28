@@ -34,7 +34,6 @@ import {
   Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { utils, writeFile } from 'xlsx';
 import { toCanvas } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { 
@@ -53,6 +52,7 @@ import {
 } from 'recharts';
 import DataService, { RealtimeData, HistoryItem, Thresholds } from '../services/dataService';
 import { cn } from '../lib/utils';
+import { saveXlsxFile } from '../lib/xlsxExport';
 import { useNotifications } from '../context/NotificationContext';
 import { RadarChartD3 } from './RadarChartD3';
 
@@ -687,35 +687,23 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       const plotName = currentPlot?.name || activePlot;
       const cropName = currentPlot?.crop || '未知';
 
-      // 创建工作表
-      const ws = utils.json_to_sheet([]);
-
       // 专属美化表头设计
       const headerTitle = "🌱 农星智境 (AgriStar) - 农田环境高频遥测报表";
       const subTitle1 = `📍 关联数据源地块: ${plotName}      🌾 种植资产: ${cropName}`;
       const subTitle2 = `📅 生成批次: ${new Date().toLocaleString()}      💻 引擎节点: 数据监测决策中心`;
       const tipInfo = `ℹ️ 安全标注: 本文件由农星智境区块链验证自动导出，提供全链路防篡改校验。`;
 
-      utils.sheet_add_aoa(ws, [
+      const headers = Object.keys(exportData[0]);
+      const rows = [
         [headerTitle],
         [],
         [subTitle1],
         [subTitle2],
         [tipInfo],
         [], // 空行分隔
-      ], { origin: 'A1' });
-
-      // 合并单元格让表头美观
-      if (!ws['!merges']) ws['!merges'] = [];
-      ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 9 } });
-      ws['!merges'].push({ s: { r: 2, c: 0 }, e: { r: 2, c: 9 } });
-      ws['!merges'].push({ s: { r: 3, c: 0 }, e: { r: 3, c: 9 } });
-      ws['!merges'].push({ s: { r: 4, c: 0 }, e: { r: 4, c: 9 } });
-
-      utils.sheet_add_json(ws, exportData, { origin: 'A7' });
-
-      const wb = utils.book_new();
-      utils.book_append_sheet(wb, ws, t('monitoring.export.sheetName'));
+        headers,
+        ...exportData.map((row) => headers.map((header) => row[header] ?? '')),
+      ];
 
       const filename = t('monitoring.export.filename', { 
         name: plotName, 
@@ -723,7 +711,14 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       });
 
       // 写入文件并触发下载
-      writeFile(wb, filename);
+      await saveXlsxFile({
+        name: t('monitoring.export.sheetName'),
+        rows,
+        merges: ['A1:J1', 'A3:J3', 'A4:J4', 'A5:J5'],
+        columnWidths: headers.map((header, index) => (
+          index === 0 ? 22 : Math.max(14, Math.min(30, header.length + 4))
+        )),
+      }, filename);
 
       addNotification({
         title: t('monitoring.export.success'),

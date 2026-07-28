@@ -50,6 +50,7 @@ export default function HUD({
   isImmersive,
   onToggleImmersive,
   onControlHardware,
+  readOnly,
 }: HUDProps) {
   const [time, setTime] = useState(new Date());
   const [showPanels, setShowPanels] = useState(true);
@@ -231,7 +232,7 @@ export default function HUD({
             <>
               {activeMacroTab === "dashboard" && <DashboardPanels.Left realtimeData={realtimeData} hardwareStatus={hardwareStatus} />}
               {activeMacroTab === "monitoring" && <EnvPanels.Left realtimeData={realtimeData} />}
-              {activeMacroTab === "management" && <DevicePanels.Left hardwareStatus={hardwareStatus} onControlHardware={onControlHardware} />}
+              {!readOnly && activeMacroTab === "management" && <DevicePanels.Left hardwareStatus={hardwareStatus} onControlHardware={onControlHardware} />}
               {activeMacroTab === "ai" && <PersonnelPanels.Left realtimeData={realtimeData} systemLogs={systemLogs} />}
               {activeMacroTab === "ai-insight" && <AIInsightLeft aiResult={aiResult} plot={plots?.find((p) => p.id === activePlotId)} realtimeData={realtimeData} />}
             </>
@@ -246,7 +247,7 @@ export default function HUD({
             <>
               {activeMacroTab === "dashboard" && <DashboardPanels.Right realtimeData={realtimeData} systemLogs={systemLogs} time={time} />}
               {activeMacroTab === "monitoring" && <EnvPanels.Right realtimeData={realtimeData} />}
-              {activeMacroTab === "management" && <DevicePanels.Right hardwareStatus={hardwareStatus} onControlHardware={onControlHardware} />}
+              {!readOnly && activeMacroTab === "management" && <DevicePanels.Right hardwareStatus={hardwareStatus} onControlHardware={onControlHardware} />}
               {activeMacroTab === "ai" && <PersonnelPanels.Right />}
               {activeMacroTab === "ai-insight" && <AIInsightRight aiResult={aiResult} realtimeData={realtimeData} />}
             </>
@@ -261,7 +262,7 @@ export default function HUD({
             {[
               { id: "dashboard", label: "基地概览" },
               { id: "monitoring", label: "环境监测" },
-              { id: "management", label: "设备管控" },
+              ...(!readOnly ? [{ id: "management", label: "设备管控" }] : []),
               { id: "ai", label: "人员管理" },
               { id: "ai-insight", label: "AI 研判" },
             ].map((tab) => {

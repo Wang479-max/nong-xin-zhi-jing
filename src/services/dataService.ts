@@ -15,7 +15,7 @@ const getApiBaseUrl = () => {
 export const API_BASE_URL = getApiBaseUrl();
 
 // 商业模式静态目录（离线/降级时的回退数据源，单一数据源见 data/pricing.ts）
-import { PLAN_DEFS, PRODUCTS, VALUE_SERVICES, PAYMENT_PROVIDERS, getPlanDef } from '../data/pricing';
+import { saasClient } from './saasClient';
 
 // 演示模式开关，从 localStorage 读取
 export const isDemoMode = () => {
@@ -69,8 +69,8 @@ export const ensureOnlineOnStartup = async (): Promise<boolean> => {
 export const getUserApiKeys = () => {
   if (typeof window !== 'undefined') {
     return {
-      qwenKey: localStorage.getItem('nxzj_user_qwen_key') || '',
-      zhipuKey: localStorage.getItem('nxzj_user_zhipu_key') || ''
+      qwenKey: localStorage.getItem('nxzj_ai_qwen_key') || '',
+      zhipuKey: localStorage.getItem('nxzj_ai_zhipu_key') || ''
     };
   }
   return { qwenKey: '', zhipuKey: '' };
@@ -91,21 +91,13 @@ export const incrementPublicAIUsage = () => {
 };
 
 export const getCurrentUsername = () => {
-  if (typeof window !== 'undefined') {
-    try {
-      const userStr = localStorage.getItem('nxzj_user');
-      if (userStr) {
-        return JSON.parse(userStr).username;
-      }
-    } catch (e) {}
-  }
-  return null;
+  return saasClient.currentSession()?.user.username ?? null;
 };
 
 export const setUserApiKeys = (qwenKey: string, zhipuKey: string) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('nxzj_user_qwen_key', qwenKey);
-    localStorage.setItem('nxzj_user_zhipu_key', zhipuKey);
+    localStorage.setItem('nxzj_ai_qwen_key', qwenKey);
+    localStorage.setItem('nxzj_ai_zhipu_key', zhipuKey);
   }
 };
 
@@ -239,7 +231,7 @@ const apiFetch = async (url: string, options: RequestInit = {}): Promise<Respons
     }, 5000);
 
     try {
-      const response = await fetch(fullUrl, { ...options, signal: controller.signal });
+      const response = await saasClient.fetchWithSession(fullUrl, { ...options, signal: controller.signal });
       clearTimeout(timeoutId);
       clearTimeout(slowWarningTimeoutId);
 
@@ -391,41 +383,6 @@ let globalRealtimeData: RealtimeData = {
   potassium: 200
 };
 
-// 模拟用户信息，用于演示模式
-let mockUser: any = {
-  username: 'admin',
-  name: '张农芯',
-  role: '管理员',
-  plan: '企业版',
-  avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
-  bio: '致力于智慧农业技术推广的先行者，农芯智境平台创始人。',
-  phone: '13800138000',
-  email: 'admin@nxzj.com',
-  location: '北京市海淀区中关村农业科技园',
-  joinDate: '2024-01-01',
-  securityLogs: [
-    { event: '登录成功', time: new Date().toISOString(), ip: '127.0.0.1' }
-  ],
-  favorites: [],
-  twoFactorEnabled: false
-};
-
-const getLocalUsers = () => {
-  if (typeof window !== 'undefined') {
-    const data = localStorage.getItem('nxzj_local_users');
-    if (data) return JSON.parse(data);
-  }
-  return {
-    'admin': { ...mockUser, password: 'password123' }
-  };
-};
-
-const saveLocalUsers = (users: any) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('nxzj_local_users', JSON.stringify(users));
-  }
-};
-
 // 监听回调列表
 const listeners: (() => void)[] = [];
 
@@ -457,32 +414,8 @@ const DataService = {
    * 更新用户头像
    */
   uploadAvatar: async (file: File, username?: string): Promise<string> => {
-    try {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          const base64 = reader.result as string;
-          try {
-            const response = await apiFetch('/api/user/avatar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ avatar: base64, username })
-            });
-
-            if (!response.ok) throw new Error('头像上传失败');
-            const data = await response.json();
-            resolve(data.avatarUrl);
-          } catch (error) {
-            reject(error);
-          }
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    } catch (error) {
-      console.error('Upload avatar error:', error);
-      throw error;
-    }
+    void file; void username;
+    throw new Error('该功能尚未接入安全账户服务');
   },
 
   /**
@@ -1202,70 +1135,20 @@ const DataService = {
    * 用户登录
    */
   login: async (payload: any) => {
-    try {
-      const response = await apiFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        throw new Error('Received HTML instead of JSON');
-      }
-      const data = await response.json();
-      return { ok: response.ok, data };
-    } catch (error) {
-      console.warn('Simulating login in demo mode:', error);
-      const users = getLocalUsers();
-      const user = users[payload.username];
-      if (user && user.password === payload.password) {
-        // Remove password before returning
-        const { password, ...safeUser } = user;
-        return { ok: true, data: { user: safeUser, token: 'demo-token' } };
-      }
-      return { ok: false, data: { message: '用户名或密码错误' } };
-    }
+    const session = await saasClient.login({ email: payload.email ?? payload.username, password: payload.password });
+    return { ok: true, data: session };
   },
 
   /**
    * 用户注册
    */
   register: async (payload: any) => {
-    try {
-      const response = await apiFetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        throw new Error('Received HTML instead of JSON');
-      }
-      const data = await response.json();
-      return { ok: response.ok, data };
-    } catch (error) {
-      console.warn('Simulating register in demo mode:', error);
-      const users = getLocalUsers();
-      if (users[payload.username]) {
-        return { ok: false, data: { message: '用户名已存在' } };
-      }
-      const newUser = {
-        username: payload.username,
-        password: payload.password,
-        role: payload.role || '普通用户',
-        plan: '免费版',
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${payload.username}`,
-        joinDate: new Date().toISOString().split('T')[0],
-        securityLogs: [{ event: '注册成功', time: new Date().toISOString(), ip: '127.0.0.1' }],
-        favorites: [],
-        twoFactorEnabled: false
-      };
-      users[payload.username] = newUser;
-      saveLocalUsers(users);
-      
-      const { password, ...safeUser } = newUser;
-      return { ok: true, data: { user: safeUser, token: 'demo-token' } };
-    }
+    const session = await saasClient.register({
+      email: payload.email ?? payload.username,
+      password: payload.password,
+      verificationCode: payload.verificationCode,
+    });
+    return { ok: true, data: session };
   },
 
   /**
@@ -1366,346 +1249,112 @@ const DataService = {
    * 开启双重身份验证
    */
   enable2FA: async (username: string) => {
-    try {
-      const response = await apiFetch('/api/user/security/2fa/enable', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
-      });
-      if (!response.ok) throw new Error('开启 2FA 失败');
-      const data = await response.json();
-      const users = getLocalUsers();
-      if (users[username]) {
-        users[username].twoFactorEnabled = true;
-        saveLocalUsers(users);
-      }
-      return data;
-    } catch (error) {
-      console.warn('Simulating 2FA enable in demo mode:', error);
-      const users = getLocalUsers();
-      if (users[username]) {
-        users[username].twoFactorEnabled = true;
-        saveLocalUsers(users);
-      }
-      return { success: true, message: '双重验证已开启（演示模式）' };
-    }
+    void username;
+    throw new Error('该功能尚未接入安全账户服务');
   },
 
   /**
    * 关闭双重身份验证
    */
   disable2FA: async (username: string) => {
-    try {
-      const response = await apiFetch('/api/user/security/2fa/disable', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
-      });
-      if (!response.ok) throw new Error('关闭 2FA 失败');
-      const data = await response.json();
-      const users = getLocalUsers();
-      if (users[username]) {
-        users[username].twoFactorEnabled = false;
-        saveLocalUsers(users);
-      }
-      return data;
-    } catch (error) {
-      console.warn('Simulating 2FA disable in demo mode:', error);
-      const users = getLocalUsers();
-      if (users[username]) {
-        users[username].twoFactorEnabled = false;
-        saveLocalUsers(users);
-      }
-      return { success: true, message: '双重验证已关闭（演示模式）' };
-    }
+    void username;
+    throw new Error('该功能尚未接入安全账户服务');
   },
 
   /**
    * 获取用户资料
    */
   getUserProfile: async (username?: string) => {
-    try {
-      const url = username ? `/api/user/profile?username=${username}` : '/api/user/profile';
-      const response = await apiFetch(url);
-      if (!response.ok) throw new Error('获取用户资料失败');
-      const data = await response.json();
-      const users = getLocalUsers();
-      if (username && users[username]) {
-        users[username] = { ...users[username], ...data };
-        saveLocalUsers(users);
-      }
-      return data;
-    } catch (error) {
-      console.warn('Using mock user profile due to fetch error or demo mode:', error);
-      const users = getLocalUsers();
-      return username ? users[username] || mockUser : mockUser;
-    }
+    const context = await saasClient.me();
+    if (username && username !== context.user.username) throw new Error('无权读取其他用户资料');
+    return { ...context.user, organization: context.organization, membership: context.membership, entitlement: context.entitlement };
   },
 
   /**
    * 更新用户资料
    */
   updateUserProfile: async (profile: any) => {
-    try {
-      const response = await apiFetch('/api/user/profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile)
-      });
-      if (!response.ok) throw new Error('更新用户资料失败');
-      const data = await response.json();
-      const users = getLocalUsers();
-      const targetUser = profile.username || getCurrentUsername();
-      if (targetUser && users[targetUser]) {
-        users[targetUser] = { ...users[targetUser], ...data };
-        saveLocalUsers(users);
-      }
-      return data;
-    } catch (error) {
-      console.warn('Updating mock user profile due to fetch error or demo mode:', error);
-      const users = getLocalUsers();
-      const targetUser = profile.username || getCurrentUsername();
-      if (targetUser && users[targetUser]) {
-        users[targetUser] = { ...users[targetUser], ...profile };
-        saveLocalUsers(users);
-      }
-      return profile;
-    }
+    void profile;
+    throw new Error('该功能尚未接入安全账户服务');
   },
 
   /**
    * 修改密码
    */
   changePassword: async (payload: any) => {
-    try {
-      const response = await apiFetch('/api/user/security/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || '修改密码失败');
-      }
-      const users = getLocalUsers();
-      const targetUser = payload.username || getCurrentUsername();
-      if (targetUser && users[targetUser]) {
-        users[targetUser].password = payload.newPassword;
-        saveLocalUsers(users);
-      }
-      return await response.json();
-    } catch (error) {
-      console.warn('Simulating password change success in demo mode:', error);
-      const users = getLocalUsers();
-      const targetUser = payload.username || getCurrentUsername();
-      if (targetUser && users[targetUser]) {
-        if (users[targetUser].password !== payload.oldPassword) {
-          throw new Error('当前密码不正确');
-        }
-        users[targetUser].password = payload.newPassword;
-        saveLocalUsers(users);
-        return { success: true, message: '密码修改成功' };
-      }
-      throw new Error('用户不存在');
-    }
+    void payload;
+    throw new Error('该功能尚未接入安全账户服务');
   },
 
   /**
    * 获取用户收藏列表
    */
   getFavorites: async (username?: string) => {
-    const cacheKey = `nxzj_favorites_cache_${username || 'admin'}`;
-    try {
-      const url = username ? `/api/user/favorites?username=${username}` : '/api/user/favorites';
-      const response = await apiFetch(url);
-      if (!response.ok) throw new Error('获取收藏列表失败');
-      const data = await response.json();
-      if (typeof window !== 'undefined' && Array.isArray(data)) {
-        localStorage.setItem(cacheKey, JSON.stringify(data));
-      }
-      return data;
-    } catch (error) {
-      console.warn('Get favorites network issue, loading from local cache:', error);
-      if (typeof window !== 'undefined') {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-          try {
-            return JSON.parse(cached);
-          } catch (e) {
-            return [];
-          }
-        }
-      }
-      return [];
-    }
+    const identity = username ?? getCurrentUsername();
+    if (!identity || typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem(`nxzj_favorites_${identity}`) ?? '[]'); } catch { return []; }
   },
 
   /**
    * 添加收藏
    */
   addFavorite: async (articleId: string, username?: string) => {
-    const cacheKey = `nxzj_favorites_cache_${username || 'admin'}`;
-    try {
-      const response = await apiFetch('/api/user/favorites', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleId, username })
-      });
-      if (!response.ok) throw new Error('添加收藏失败');
-      const result = await response.json();
-      if (typeof window !== 'undefined') {
-        const cachedStr = localStorage.getItem(cacheKey) || '[]';
-        try {
-          const cached = JSON.parse(cachedStr);
-          if (!cached.some((item: any) => item.id === articleId)) {
-            cached.push({ id: articleId });
-            localStorage.setItem(cacheKey, JSON.stringify(cached));
-          }
-        } catch (e) {}
-      }
-      return result;
-    } catch (error) {
-      console.warn('Add favorite network error, updating local cache only:', error);
-      if (typeof window !== 'undefined') {
-        const cachedStr = localStorage.getItem(cacheKey) || '[]';
-        try {
-          const cached = JSON.parse(cachedStr);
-          if (!cached.some((item: any) => item.id === articleId)) {
-            cached.push({ id: articleId });
-            localStorage.setItem(cacheKey, JSON.stringify(cached));
-          }
-        } catch (e) {}
-      }
-      return { success: true };
-    }
+    const identity = username ?? getCurrentUsername();
+    if (!identity || typeof window === 'undefined') throw new Error('无法确定当前用户');
+    const key = `nxzj_favorites_${identity}`;
+    const current = await DataService.getFavorites(identity);
+    if (!current.some((item: any) => item.id === articleId)) current.push({ id: articleId });
+    localStorage.setItem(key, JSON.stringify(current));
+    return { success: true };
   },
 
   /**
    * 移除收藏
    */
   removeFavorite: async (articleId: string, username?: string) => {
-    const cacheKey = `nxzj_favorites_cache_${username || 'admin'}`;
-    try {
-      const url = username ? `/api/user/favorites/${articleId}?username=${username}` : `/api/user/favorites/${articleId}`;
-      const response = await apiFetch(url, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error('移除收藏失败');
-      const result = await response.json();
-      if (typeof window !== 'undefined') {
-        const cachedStr = localStorage.getItem(cacheKey) || '[]';
-        try {
-          const cached = JSON.parse(cachedStr);
-          const updated = cached.filter((item: any) => item.id !== articleId);
-          localStorage.setItem(cacheKey, JSON.stringify(updated));
-        } catch (e) {}
-      }
-      return result;
-    } catch (error) {
-      console.warn('Remove favorite network error, updating local cache only:', error);
-      if (typeof window !== 'undefined') {
-        const cachedStr = localStorage.getItem(cacheKey) || '[]';
-        try {
-          const cached = JSON.parse(cachedStr);
-          const updated = cached.filter((item: any) => item.id !== articleId);
-          localStorage.setItem(cacheKey, JSON.stringify(updated));
-        } catch (e) {}
-      }
-      return { success: true };
-    }
+    const identity = username ?? getCurrentUsername();
+    if (!identity || typeof window === 'undefined') throw new Error('无法确定当前用户');
+    const current = await DataService.getFavorites(identity);
+    localStorage.setItem(`nxzj_favorites_${identity}`, JSON.stringify(current.filter((item: any) => item.id !== articleId)));
+    return { success: true };
   },
 
   // ===== 商业模式：订阅 / 硬件 / 增值服务 =====
 
   /** 获取商品/套餐/服务目录 */
   getStoreCatalog: async () => {
-    try {
-      const response = await apiFetch('/api/store/catalog');
-      if (!response.ok) throw new Error('获取目录失败');
-      return await response.json();
-    } catch (error) {
-      console.warn('Using local pricing catalog fallback:', error);
-      return { plans: PLAN_DEFS, products: PRODUCTS, services: VALUE_SERVICES, paymentProviders: PAYMENT_PROVIDERS };
-    }
+    return saasClient.catalog();
   },
 
   /** 获取当前用户权益快照 */
   getEntitlements: async (username?: string) => {
-    try {
-      const url = username ? `/api/commerce/me?username=${encodeURIComponent(username)}` : '/api/commerce/me';
-      const response = await apiFetch(url);
-      if (!response.ok) throw new Error('获取权益失败');
-      const data = await response.json();
-      if (typeof window !== 'undefined') localStorage.setItem('nxzj_entitlements', JSON.stringify(data));
-      return data;
-    } catch (error) {
-      console.warn('Using cached/local entitlements fallback:', error);
-      if (typeof window !== 'undefined') {
-        const cached = localStorage.getItem('nxzj_entitlements');
-        if (cached) { try { return JSON.parse(cached); } catch (e) {} }
-      }
-      const def = getPlanDef('企业版');
-      return { username: username || null, planId: def.id, planName: def.name, features: def.features, plotLimit: def.plotLimit, plotsOwned: 0, aiMonthlyQuota: def.aiMonthlyQuota, aiUsedThisMonth: 0, subscriptions: [], purchasedServices: [], commerceDemo: false, hasAdvancedAiPack: false };
-    }
+    void username;
+    return saasClient.entitlements();
   },
 
   /** 我的订单 */
   getCommerceOrders: async (username?: string) => {
-    try {
-      const url = username ? `/api/commerce/orders?username=${encodeURIComponent(username)}` : '/api/commerce/orders';
-      const response = await apiFetch(url);
-      if (!response.ok) throw new Error('获取订单失败');
-      return await response.json();
-    } catch (error) {
-      console.warn('Commerce orders fetch failed, returning empty list:', error);
-      return [];
-    }
+    void username;
+    return saasClient.listOrders();
   },
 
   /** 统一下单（type: subscription | hardware | service） */
-  createOrder: async (payload: { username: string; type: string; planId?: string; plotIds?: string[]; years?: number; qty?: number; items?: { refId: string; qty: number }[]; provider?: string }) => {
-    const response = await apiFetch('/api/commerce/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const err = new Error(data.message || data.error || '下单失败');
-      (err as any).status = response.status; (err as any).data = data;
-      throw err;
-    }
-    return data;
+  createOrder: async (payload: { productId: string; quantity: number; idempotencyKey: string }) => {
+    return saasClient.createOrder(payload);
   },
 
   /** 真实支付回调（演示用：手动结算待支付订单） */
   notifyPayment: async (orderId: string) => {
-    const response = await apiFetch('/api/payments/notify', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId }),
-    });
-    if (!response.ok) throw new Error('支付结算失败');
-    return await response.json();
+    return saasClient.settleOrder(orderId);
   },
 
   /** 商业演示模式（门控一键切换，服务端持久化） */
   getCommerceDemo: async (): Promise<boolean> => {
-    try {
-      const response = await apiFetch('/api/commerce/demo');
-      if (!response.ok) throw new Error('x');
-      const data = await response.json();
-      return !!data.commerceDemo;
-    } catch { return false; }
+    return false;
   },
   setCommerceDemo: async (enabled: boolean): Promise<boolean> => {
-    try {
-      const response = await apiFetch('/api/commerce/demo', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
-      });
-      const data = await response.json();
-      return !!data.commerceDemo;
-    } catch { return enabled; }
+    void enabled;
+    throw new Error('商业演示开关已停用');
   },
 
   getUserApiKeys,

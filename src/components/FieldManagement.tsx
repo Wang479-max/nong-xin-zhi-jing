@@ -72,7 +72,7 @@ import {
  * @description 农田管理模块。
  * 包含：地块统计、AI决策支持（智谱API预留）、经济效益分析、自动化硬件控制。
  */
-const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void }> = ({ user, onNavigate }) => {
+const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, digitalTwinReadOnly: boolean, onUpgradeDigitalTwin: () => void }> = ({ user, onNavigate, digitalTwinReadOnly, onUpgradeDigitalTwin }) => {
   const { t } = useTranslation();
   const { addNotification } = useNotifications();
   const { ent } = useEntitlements(user);
@@ -222,9 +222,9 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void }
 
   // 检查是否可以添加地块（套餐地块上限，演示模式放行）
   const canAddPlot = () => {
-    if (ent?.commerceDemo) return true;
-    const limit = ent ? ent.plotLimit : getPlotLimit(user?.plan);
-    if (limit === -1) return true;
+    if (user?.platformRole === 'platform_admin') return true;
+    const limit = ent?.limits.plots;
+    if (typeof limit !== 'number') return false;
     return plots.length < limit;
   };
 
@@ -593,6 +593,8 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void }
             hardwareStatus={hardwareStatus}
             realtimeData={realtimeData}
             aiResult={aiResult}
+            readOnly={digitalTwinReadOnly}
+            onUpgrade={onUpgradeDigitalTwin}
           />
         </div>
       ) : (
