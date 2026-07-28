@@ -1192,11 +1192,11 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
   const errorDetails = getErrorDetails(recognitionError || plotAnalysisError);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-4 px-0 sm:space-y-6 sm:px-4 lg:px-0">
       {/* API Key Prompt Modal */}
       <AnimatePresence>
         {showApiKeyPrompt && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 sm:p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1208,7 +1208,7 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
               initial={{ scale: 0.9, opacity: 0, y: 40 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 40 }}
-              className="relative w-full max-w-lg bg-white/90 dark:bg-[#0A0A0A]/80 backdrop-blur-3xl rounded-[48px] p-10 shadow-2xl border border-white/20 dark:border-white/5 overflow-hidden"
+              className="relative h-[100dvh] w-full max-w-none overflow-y-auto bg-white/90 p-4 dark:bg-[#0A0A0A]/80 backdrop-blur-3xl rounded-none sm:h-auto sm:max-w-lg sm:rounded-[48px] sm:p-10 shadow-2xl border border-white/20 dark:border-white/5"
             >
               <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full -mr-32 -mt-32 blur-[100px]" />
               
@@ -1331,7 +1331,7 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
           <p className="text-slate-500 dark:text-slate-400 font-medium">融合视觉识别与大语言模型，为您提供专业的农事诊断建议</p>
         </div>
         
-        <div className="flex bg-white/70 dark:bg-[#0A0A0A]/40 backdrop-blur-xl p-1.5 rounded-2xl shadow-xl shadow-black/5 border border-white/20 dark:border-white/5">
+        <div className="mobile-scroll-row w-full gap-1 bg-white/70 dark:bg-[#0A0A0A]/40 backdrop-blur-xl p-1.5 rounded-2xl shadow-xl shadow-black/5 border border-white/20 dark:border-white/5 md:w-auto">
           {types.map((t) => (
             <button
               key={t.id}
@@ -1340,7 +1340,7 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
                 setDisplayedResult(null);
               }}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all",
+                "flex min-h-11 shrink-0 items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all",
                 analysisType === t.id 
                   ? "bg-forest-green text-white shadow-lg shadow-forest-green/20" 
                   : "text-slate-500 dark:text-slate-400 hover:bg-slate-50/80 dark:hover:bg-[#1A1A1A]/40"
@@ -1355,9 +1355,9 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Upload & Preview */}
-        <div className="lg:col-span-4 space-y-4 sticky top-8">
+        <div id="ai-capture" className="lg:col-span-4 space-y-4 lg:sticky lg:top-8">
           <div 
-            id="ai-upload-area"
+            id="ai-upload"
             className={cn(
               "relative aspect-square bento-card border-2 border-dashed transition-all overflow-hidden flex flex-col items-center justify-center group",
               selectedImage 
@@ -1365,6 +1365,7 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
                 : "border-slate-200/50 dark:border-[#222222]/30"
             )}
           >
+            <span id="ai-upload-area" className="sr-only" aria-hidden="true" />
             <input 
               type="file" 
               ref={fileInputRef} 
@@ -1709,7 +1710,8 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
                 {!isAnalyzing && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); setSelectedImage(null); setDisplayedResult(null); }}
-                    className="absolute top-4 right-4 w-10 h-10 bg-white/80 dark:bg-[#1A1A1A]/80 backdrop-blur-md rounded-full flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-red-500 transition-colors shadow-lg z-10"
+                    aria-label="清除已选图片"
+                    className="absolute top-4 right-4 w-11 h-11 bg-white/80 dark:bg-[#1A1A1A]/80 backdrop-blur-md rounded-full flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-red-500 transition-colors shadow-lg z-10"
                   >
                     <X size={20} />
                   </button>
@@ -2056,13 +2058,13 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
           </div>
 
           {/* Recognition History Panel */}
-          <div className="bg-white/70 dark:bg-[#0A0A0A]/40 backdrop-blur-xl rounded-3xl p-5 shadow-xl shadow-black/5 border border-white/20 dark:border-white/5 space-y-4">
+          <div id="ai-history" className="bg-white/70 dark:bg-[#0A0A0A]/40 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xl shadow-black/5 border border-white/20 dark:border-white/5 space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <History size={18} className="text-forest-green" />
               <h3 className="text-sm font-black text-slate-800 dark:text-white">{t('ai_recognition.labels.history_title')}</h3>
             </div>
             
-            <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+            <div className="hidden space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1 md:block">
               {history.length === 0 ? (
                 <div className="py-8 text-center">
                   <p className="text-xs text-slate-400 font-medium italic">{t('ai_recognition.labels.no_history')}</p>
@@ -2104,11 +2106,46 @@ const AIRecognition: React.FC<AIRecognitionProps> = ({ onNavigate, user: propUse
                 ))
               )}
             </div>
+
+            <table data-mobile-table className="w-full md:hidden">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>类型</th>
+                  <th>识别目标</th>
+                  <th>置信度</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.length === 0 ? (
+                  <tr>
+                    <td data-label="记录" colSpan={5}>{t('ai_recognition.labels.no_history')}</td>
+                  </tr>
+                ) : history.map((item) => (
+                  <tr key={item.id}>
+                    <td data-label="日期">{new Date(item.timestamp).toLocaleDateString()}</td>
+                    <td data-label="类型">{types.find(type => type.id === item.type)?.label || item.type}</td>
+                    <td data-label="识别目标">{item.result?.target || t('ai_recognition.labels.unknown_target', '未知目标')}</td>
+                    <td data-label="置信度">{item.result?.confidence ? (item.result.confidence * 100).toFixed(0) : '0'}%</td>
+                    <td data-label="操作">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectHistory(item)}
+                        className="mobile-touch-target rounded-xl bg-forest-green px-4 text-xs font-black text-white"
+                      >
+                        查看结果
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 
         {/* Right: Results */}
-        <div className="lg:col-span-8 space-y-4">
+        <div id="ai-results" className="lg:col-span-8 space-y-4">
           <AnimatePresence mode="wait">
             {errorDetails ? (
               <motion.div 

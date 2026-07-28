@@ -39,4 +39,12 @@ describe('mobile module layout contracts', () => {
     expect(management).toContain('id="management-fields"');
     expect(management).toContain('grid-cols-1 sm:grid-cols-2 md:grid-cols-4');
   });
+
+  it('uses a vertical AI workflow and mobile record cards', () => {
+    const ai = read('src/components/AIRecognition.tsx');
+
+    expect(ai).toContain('id="ai-capture"');
+    expect(ai).toContain('data-mobile-table');
+    expect(ai).toContain('data-label=');
+  });
 });
