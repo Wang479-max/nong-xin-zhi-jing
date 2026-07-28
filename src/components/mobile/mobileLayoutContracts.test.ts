@@ -20,3 +20,13 @@ describe('mobile application shell contracts', () => {
     expect(read('src/index.css')).toContain('.mobile-touch-target');
   });
 });
+
+describe('mobile module layout contracts', () => {
+  it('uses mobile-first dashboard spacing and section anchors', () => {
+    const source = read('src/components/Dashboard.tsx');
+
+    expect(source).toContain('p-3 sm:p-6 lg:p-14');
+    expect(source).toContain('id="dashboard-environment"');
+    expect(source).toContain('grid-cols-2 sm:grid-cols-4');
+  });
+});
