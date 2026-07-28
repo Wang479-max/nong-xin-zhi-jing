@@ -490,6 +490,38 @@ html, body, #root {
   }
 }
 
+@media (max-width: 767px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 320px;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .mobile-content {
+    overscroll-behavior-y: contain;
+  }
+
+  .mobile-scroll-row {
+    display: flex;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .mobile-scroll-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 /* Custom driver.js Theme for NxZj */
 div.driver-popover {
   @apply !bg-[#0f172a] !text-white !border !border-white/10 !rounded-3xl !shadow-2xl !p-6;

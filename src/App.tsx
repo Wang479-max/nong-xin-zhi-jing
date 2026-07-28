@@ -77,10 +77,12 @@ import { invalidateEntitlements, useEntitlements } from './hooks/usePlanGate';
 import { canAccessAction, canAccessModule, type ModuleId } from './lib/moduleAccess';
 import { SESSION_EXPIRED_EVENT, saasClient } from './services/saasClient';
 import type { SaasSession } from './types/saas';
+import MobileAppChrome from './components/mobile/MobileAppChrome';
+import { getMobileNavigationGroups, getMobileSections } from './components/mobile/mobileNavigation';
 
 // --- Components ---
 
-const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: string) => void, user: any }) => {
+const GlobalSearch = ({ onNavigate, user, mobile = false }: { onNavigate: (tab: string, query?: string) => void, user: any, mobile?: boolean }) => {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{
@@ -177,8 +179,11 @@ const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: 
   const hasResults = results.features.length > 0 || results.plots.length > 0 || results.knowledge.length > 0;
 
   return (
-    <div ref={searchRef} className="relative z-[100]">
-      <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-[#1A1A1A] rounded-2xl border border-slate-100 dark:border-white/5 focus-within:border-forest-green dark:focus-within:border-emerald-500/50 focus-within:bg-white dark:focus-within:bg-[#2A2A2A] transition-all w-64 lg:w-80 shadow-sm">
+    <div ref={searchRef} className={cn("relative z-[100]", mobile && "w-full")}>
+      <div className={cn(
+        "items-center gap-2 bg-slate-50 dark:bg-[#1A1A1A] border border-slate-100 dark:border-white/5 focus-within:border-forest-green dark:focus-within:border-emerald-500/50 focus-within:bg-white dark:focus-within:bg-[#2A2A2A] transition-all shadow-sm",
+        mobile ? "flex h-9 w-full rounded-full px-3" : "hidden w-64 rounded-2xl px-4 py-2 md:flex lg:w-80",
+      )}>
         <Search size={16} className={cn("text-slate-400 transition-colors", query && "text-forest-green")} />
         <input 
           type="text" 
@@ -190,7 +195,7 @@ const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: 
         />
         {isSearching && <Loader2 size={14} className="animate-spin text-forest-green" />}
         {query && !isSearching && (
-          <button onClick={() => setQuery('')} className="text-slate-300 hover:text-slate-500 transition-colors">
+          <button aria-label="清除搜索" onClick={() => setQuery('')} className="text-slate-300 hover:text-slate-500 transition-colors">
             <X size={14} />
           </button>
         )}
@@ -202,7 +207,12 @@ const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: 
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute top-full left-0 mt-3 w-[400px] bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-slate-200/50 dark:border-white/10 overflow-hidden"
+            className={cn(
+              "bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-2xl shadow-2xl border border-slate-200/50 dark:border-white/10 overflow-hidden",
+              mobile
+                ? "fixed left-3 right-3 top-[calc(3.5rem+env(safe-area-inset-top))] w-auto rounded-2xl"
+                : "absolute left-0 top-full mt-3 w-[400px] rounded-3xl",
+            )}
           >
             <div className="max-h-[500px] overflow-y-auto p-2 custom-scrollbar">
               {!isSearching && !hasResults ? (
@@ -986,6 +996,16 @@ function AppContent() {
     { id: 'market' as ModuleId, label: '服务市场', icon: ShoppingBag, keywords: ['订阅', '套餐', '商城', '升级', '购买', 'market'] },
   ];
 
+  const navigationItems = [
+    ...menuItems,
+    { id: 'feedback' as ModuleId, label: t('app.feedback'), icon: MessageSquare, keywords: ['反馈', '建议', '问题', 'feedback'] },
+  ];
+  const {
+    primary: mobilePrimaryItems,
+    secondary: mobileSecondaryItems,
+  } = getMobileNavigationGroups(navigationItems);
+  const mobileSections = getMobileSections(activeTab);
+
   function handleNavigate(tab: string, query?: string) {
     if (tab === 'digitalTwin') {
       setAppMode('3d');
@@ -1009,6 +1029,13 @@ function AppContent() {
         }
       }, 300);
     }
+  }
+
+  function handleMobileSectionSelect(sectionId: string) {
+    document.getElementById(sectionId)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
   }
 
   const handleUpdateUser = () => {
@@ -1065,6 +1092,7 @@ function AppContent() {
       case 'ai': return t('app.ai');
       case 'knowledge': return t('app.knowledge');
       case 'news': return t('app.news');
+      case 'market': return '服务市场';
       case 'feedback': return t('app.feedback');
       default: return t('app.dashboard');
     }
@@ -1212,9 +1240,24 @@ function AppContent() {
 
         {/* Main Container */}
         <div className="flex-1 flex flex-col min-w-0 relative w-full lg:w-auto">
+          {appMode !== '3d' && (
+            <MobileAppChrome
+              activeTab={activeTab}
+              title={getTitle()}
+              primaryItems={mobilePrimaryItems}
+              secondaryItems={mobileSecondaryItems}
+              sections={mobileSections}
+              search={<GlobalSearch mobile onNavigate={handleNavigate} user={user} />}
+              onNavigate={handleNavigate}
+              onSectionSelect={handleMobileSectionSelect}
+              onSettings={() => setIsSettingsOpen(true)}
+              onLogout={handleLogout}
+            />
+          )}
+
           {/* Top Header */}
           {appMode !== '3d' && (
-            <header className="h-16 lg:h-24 bg-white/40 dark:bg-[#020617]/60 backdrop-blur-3xl border-b border-slate-200/30 dark:border-white/5 flex items-center justify-between px-4 lg:px-12 relative z-30 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <header className="hidden h-16 md:flex lg:h-24 bg-white/40 dark:bg-[#020617]/60 backdrop-blur-3xl border-b border-slate-200/30 dark:border-white/5 items-center justify-between px-4 lg:px-12 relative z-30 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             <div className="flex items-center gap-4 lg:gap-8 flex-1">
               <button 
                 onClick={() => setIsMobileMenuOpen(true)}
@@ -1465,9 +1508,11 @@ function AppContent() {
         )}
 
         {/* Content Area */}
-        <main className={cn(
+        <main data-active-tab={activeTab} className={cn(
           "flex-1 relative overflow-hidden",
-          appMode === 'data' ? "bg-slate-50 dark:bg-[#050505] p-4 lg:p-12 custom-scrollbar hero-gradient" : "bg-black"
+          appMode === 'data'
+            ? "mobile-content bg-slate-50 p-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] dark:bg-[#050505] md:p-4 md:pb-4 lg:p-12 custom-scrollbar hero-gradient"
+            : "bg-black"
         )}>
           {hasOpened3D && (
             <div className={cn(
