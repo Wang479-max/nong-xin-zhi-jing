@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = resolve(import.meta.dirname, '../..');
-const read = (path: string) => readFileSync(resolve(root, path), 'utf8');
+const read = (path: string) => readFileSync(resolve(root, path), 'utf8').replace(/\r\n/g, '\n');
 
 function composeService(source: string, serviceName: string): string {
   const match = source.match(new RegExp(`^  ${serviceName}:\\n([\\s\\S]*?)(?=^  [a-zA-Z0-9_-]+:|^volumes:|\\Z)`, 'm'));
@@ -26,6 +26,14 @@ describe('production deployment contract', () => {
     expect(manifest.scripts.build).toContain('verify:build-layout');
     expect(manifest.scripts['verify:build-layout']).toContain('scripts/verifyBuildLayout.ts');
     expect(manifest.scripts['db:migrate:prod']).toBe('node dist/migrate.mjs');
+  });
+
+  it('excludes generated and isolated workspaces from type checking', () => {
+    const config = JSON.parse(read('tsconfig.json')) as { exclude?: string[] };
+
+    for (const path of ['node_modules', 'dist', 'build', 'desktop', '源码', '.worktrees']) {
+      expect(config.exclude ?? []).toContain(path);
+    }
   });
 
   it('publishes only frontend assets from dist/public', () => {
