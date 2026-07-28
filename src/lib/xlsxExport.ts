@@ -14,12 +14,14 @@ type SaveFile = (data: Blob, filename: string) => void;
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
-const MERGE_REFERENCE = /^[A-Z]{1,3}[1-9]\d*:[A-Z]{1,3}[1-9]\d*$/;
+const MERGE_REFERENCE = /^([A-Z]{1,3})([1-9]\d*):([A-Z]{1,3})([1-9]\d*)$/;
+const MAX_XLSX_COLUMN = 16_384;
+const MAX_XLSX_ROW = 1_048_576;
 
 export async function createXlsxBlob(sheet: XlsxSheet): Promise<Blob> {
   const zip = new JSZip();
   const safeName = sanitizeSheetName(sheet.name);
-  const merges = (sheet.merges ?? []).filter((reference) => MERGE_REFERENCE.test(reference));
+  const merges = (sheet.merges ?? []).filter(isValidMergeReference);
 
   zip.file('[Content_Types].xml', contentTypesXml());
   zip.file('_rels/.rels', rootRelationshipsXml());
@@ -125,7 +127,29 @@ function columnName(index: number): string {
 function maxColumnInMerge(reference: string): number {
   const endCell = reference.split(':')[1];
   const letters = endCell.match(/^[A-Z]+/)?.[0] ?? 'A';
-  return letters.split('').reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0);
+  return columnNumber(letters);
+}
+
+function isValidMergeReference(reference: string): boolean {
+  const match = reference.match(MERGE_REFERENCE);
+  if (!match) return false;
+
+  const [, startLetters, startRowValue, endLetters, endRowValue] = match;
+  const startColumn = columnNumber(startLetters);
+  const endColumn = columnNumber(endLetters);
+  const startRow = Number(startRowValue);
+  const endRow = Number(endRowValue);
+
+  return startColumn <= endColumn
+    && endColumn <= MAX_XLSX_COLUMN
+    && startRow <= endRow
+    && endRow <= MAX_XLSX_ROW;
+}
+
+function columnNumber(letters: string): number {
+  return letters
+    .split('')
+    .reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0);
 }
 
 function escapeXml(value: string): string {

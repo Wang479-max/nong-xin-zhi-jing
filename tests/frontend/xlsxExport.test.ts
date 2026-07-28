@@ -71,6 +71,24 @@ describe('safe XLSX export', () => {
     expect(workbook).toContain('<sheet name="监测数据"');
   });
 
+  it('ignores reversed or out-of-bounds merge ranges', async () => {
+    const archive = await loadWorkbook({
+      ...sheet,
+      merges: [
+        'J1:A1',
+        'XFE1:XFE2',
+        'A1048577:B1048577',
+        'A1:B2',
+      ],
+    });
+    const worksheet = await archive.file('xl/worksheets/sheet1.xml')!.async('string');
+
+    expect(worksheet).toContain('<mergeCells count="1"><mergeCell ref="A1:B2"/></mergeCells>');
+    expect(worksheet).not.toContain('J1:A1');
+    expect(worksheet).not.toContain('XFE1:XFE2');
+    expect(worksheet).not.toContain('A1048577:B1048577');
+  });
+
   it('downloads the generated XLSX under the requested filename', async () => {
     const save = vi.fn();
     await saveXlsxFile(sheet, '监测报表.xlsx', save);
