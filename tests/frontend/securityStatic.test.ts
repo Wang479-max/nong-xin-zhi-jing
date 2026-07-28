@@ -35,6 +35,14 @@ describe('frontend security retirement scan', () => {
     expect(twinTypes).toContain('onUpgrade: () => void;');
     expect(twin).toContain('基础预览');
   });
+
+  it('uses the safe XLSX writer instead of SheetJS', () => {
+    const monitoring = readFileSync(join(sourceRoot, 'components', 'FieldMonitoring.tsx'), 'utf8');
+
+    expect(monitoring).toContain("from '../lib/xlsxExport'");
+    expect(monitoring).not.toMatch(/from ['"]xlsx['"]/);
+    expect(monitoring).toContain('await saveXlsxFile(');
+  });
 });
 
 function sourceFiles(directory: string): string[] {
