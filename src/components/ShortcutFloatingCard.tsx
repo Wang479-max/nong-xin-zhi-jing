@@ -188,7 +188,7 @@ export default function ShortcutFloatingCard() {
   if (hiddenForTour) return null;
 
   return (
-    <div className="fixed bottom-10 left-4 sm:left-[110px] lg:left-[315px] z-[90] select-none pointer-events-none">
+    <div className="hidden md:block fixed bottom-10 left-[110px] right-auto z-[90] select-none pointer-events-none lg:left-[315px]">
       <div className="pointer-events-auto">
         <AnimatePresence mode="wait">
           {isCollapsed ? (
@@ -222,7 +222,7 @@ export default function ShortcutFloatingCard() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 15 }}
               className={cn(
-                "w-[340px] bg-white/95 dark:bg-[#070B14]/95 backdrop-blur-xl border rounded-2xl p-3.5 shadow-2xl relative",
+                "w-[calc(100vw-1.5rem)] max-w-[340px] bg-white/95 dark:bg-[#070B14]/95 backdrop-blur-xl border rounded-2xl p-3.5 shadow-2xl relative",
                 "border-slate-200/60 dark:border-white/10 transition-colors duration-300"
               )}
             >

@@ -481,7 +481,7 @@ export default function AIAssistant() {
       <button 
         id="ai-assistant-ball"
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-8 right-8 w-16 h-16 bg-forest-green text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-all z-[60] group"
+        className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-3 z-[60] flex h-12 w-12 items-center justify-center rounded-full bg-forest-green text-white shadow-2xl transition-all hover:scale-110 group md:bottom-8 md:right-8 md:h-16 md:w-16"
       >
         <div className="absolute inset-0 bg-forest-green rounded-full animate-ping opacity-20 group-hover:hidden" />
         <MessageSquare size={28} />
@@ -493,15 +493,15 @@ export default function AIAssistant() {
       {/* Chat Window */}
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-[100] flex items-end justify-end p-8 pointer-events-none">
+          <div className="fixed inset-0 z-[100] flex items-end justify-end p-0 pointer-events-none md:p-8">
             <motion.div 
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              className="w-full max-w-md bg-white dark:bg-[#121214] rounded-[32px] shadow-2xl border border-slate-100 dark:border-white/5 flex flex-col overflow-hidden pointer-events-auto h-[600px]"
+              className="fixed inset-x-0 bottom-0 flex h-[85dvh] max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-slate-100 bg-white shadow-2xl pointer-events-auto dark:border-white/5 dark:bg-[#121214] md:relative md:inset-auto md:h-[600px] md:max-w-md md:rounded-[32px]"
             >
               {/* Header */}
-              <div className="p-6 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex justify-between items-center relative overflow-hidden">
+              <div className="relative flex items-center justify-between overflow-hidden bg-gradient-to-r from-emerald-600 to-teal-700 p-4 text-white sm:p-6">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10 pointer-events-none" />
                 <div className="absolute -right-8 -top-8 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
                 

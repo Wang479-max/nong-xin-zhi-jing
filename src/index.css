@@ -490,6 +490,78 @@ html, body, #root {
   }
 }
 
+@media (max-width: 767px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 320px;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .mobile-content {
+    overscroll-behavior-y: contain;
+  }
+
+  .mobile-scroll-row {
+    display: flex;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .mobile-scroll-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  [data-mobile-table] thead {
+    display: none;
+  }
+
+  [data-mobile-table],
+  [data-mobile-table] tbody,
+  [data-mobile-table] tr,
+  [data-mobile-table] td {
+    display: block;
+    width: 100%;
+  }
+
+  [data-mobile-table] tr {
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 1rem;
+    background: white;
+  }
+
+  .dark [data-mobile-table] tr {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(10 10 10 / 0.7);
+  }
+
+  [data-mobile-table] td {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 40%) 1fr;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    overflow-wrap: anywhere;
+  }
+
+  [data-mobile-table] td::before {
+    content: attr(data-label);
+    color: rgb(100 116 139);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+}
+
 /* Custom driver.js Theme for NxZj */
 div.driver-popover {
   @apply !bg-[#0f172a] !text-white !border !border-white/10 !rounded-3xl !shadow-2xl !p-6;

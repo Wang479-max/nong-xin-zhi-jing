@@ -77,10 +77,13 @@ import { invalidateEntitlements, useEntitlements } from './hooks/usePlanGate';
 import { canAccessAction, canAccessModule, type ModuleId } from './lib/moduleAccess';
 import { SESSION_EXPIRED_EVENT, saasClient } from './services/saasClient';
 import type { SaasSession } from './types/saas';
+import MobileAppChrome from './components/mobile/MobileAppChrome';
+import MobileNotificationsSheet from './components/mobile/MobileNotificationsSheet';
+import { getMobileNavigationGroups, getMobileSections } from './components/mobile/mobileNavigation';
 
 // --- Components ---
 
-const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: string) => void, user: any }) => {
+const GlobalSearch = ({ onNavigate, user, mobile = false }: { onNavigate: (tab: string, query?: string) => void, user: any, mobile?: boolean }) => {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{
@@ -177,8 +180,11 @@ const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: 
   const hasResults = results.features.length > 0 || results.plots.length > 0 || results.knowledge.length > 0;
 
   return (
-    <div ref={searchRef} className="relative z-[100]">
-      <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-[#1A1A1A] rounded-2xl border border-slate-100 dark:border-white/5 focus-within:border-forest-green dark:focus-within:border-emerald-500/50 focus-within:bg-white dark:focus-within:bg-[#2A2A2A] transition-all w-64 lg:w-80 shadow-sm">
+    <div ref={searchRef} className={cn("relative z-[100]", mobile && "w-full")}>
+      <div className={cn(
+        "items-center gap-2 bg-slate-50 dark:bg-[#1A1A1A] border border-slate-100 dark:border-white/5 focus-within:border-forest-green dark:focus-within:border-emerald-500/50 focus-within:bg-white dark:focus-within:bg-[#2A2A2A] transition-all shadow-sm",
+        mobile ? "flex h-9 w-full rounded-full px-3" : "hidden w-64 rounded-2xl px-4 py-2 md:flex lg:w-80",
+      )}>
         <Search size={16} className={cn("text-slate-400 transition-colors", query && "text-forest-green")} />
         <input 
           type="text" 
@@ -190,7 +196,7 @@ const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: 
         />
         {isSearching && <Loader2 size={14} className="animate-spin text-forest-green" />}
         {query && !isSearching && (
-          <button onClick={() => setQuery('')} className="text-slate-300 hover:text-slate-500 transition-colors">
+          <button aria-label="清除搜索" onClick={() => setQuery('')} className="text-slate-300 hover:text-slate-500 transition-colors">
             <X size={14} />
           </button>
         )}
@@ -202,7 +208,12 @@ const GlobalSearch = ({ onNavigate, user }: { onNavigate: (tab: string, query?: 
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute top-full left-0 mt-3 w-[400px] bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-slate-200/50 dark:border-white/10 overflow-hidden"
+            className={cn(
+              "bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-2xl shadow-2xl border border-slate-200/50 dark:border-white/10 overflow-hidden",
+              mobile
+                ? "fixed left-3 right-3 top-[calc(3.5rem+env(safe-area-inset-top))] w-auto rounded-2xl"
+                : "absolute left-0 top-full mt-3 w-[400px] rounded-3xl",
+            )}
           >
             <div className="max-h-[500px] overflow-y-auto p-2 custom-scrollbar">
               {!isSearching && !hasResults ? (
@@ -388,7 +399,7 @@ const StatusBar = ({ user }: { user: any }) => {
   }, []);
 
   return (
-    <div className="min-h-6 bg-white dark:bg-[#0A0A0A] border-t border-slate-200/50 dark:border-white/5 flex flex-col sm:flex-row flex-wrap items-center justify-center sm:justify-between px-4 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 select-none z-[100] gap-y-1">
+    <div className="hidden min-h-6 bg-white dark:bg-[#0A0A0A] border-t border-slate-200/50 dark:border-white/5 md:flex md:flex-row flex-wrap items-center justify-center md:justify-between px-4 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 select-none z-[100] gap-y-1">
       <div className="flex items-center gap-2 sm:gap-4 flex-wrap justify-center">
         <div className="flex items-center gap-1.5">
           <div className={cn(
@@ -986,6 +997,16 @@ function AppContent() {
     { id: 'market' as ModuleId, label: '服务市场', icon: ShoppingBag, keywords: ['订阅', '套餐', '商城', '升级', '购买', 'market'] },
   ];
 
+  const navigationItems = [
+    ...menuItems,
+    { id: 'feedback' as ModuleId, label: t('app.feedback'), icon: MessageSquare, keywords: ['反馈', '建议', '问题', 'feedback'] },
+  ];
+  const {
+    primary: mobilePrimaryItems,
+    secondary: mobileSecondaryItems,
+  } = getMobileNavigationGroups(navigationItems);
+  const mobileSections = getMobileSections(activeTab);
+
   function handleNavigate(tab: string, query?: string) {
     if (tab === 'digitalTwin') {
       setAppMode('3d');
@@ -1009,6 +1030,24 @@ function AppContent() {
         }
       }, 300);
     }
+  }
+
+  function handleMobileSectionSelect(sectionId: string) {
+    if (sectionId === 'management-map') {
+      window.dispatchEvent(new CustomEvent('set-view-mode-3d'));
+      return;
+    }
+
+    if (sectionId.startsWith('management-')) {
+      window.dispatchEvent(new CustomEvent('set-view-mode-list'));
+    }
+
+    window.setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, sectionId.startsWith('management-') ? 120 : 0);
   }
 
   const handleUpdateUser = () => {
@@ -1065,6 +1104,7 @@ function AppContent() {
       case 'ai': return t('app.ai');
       case 'knowledge': return t('app.knowledge');
       case 'news': return t('app.news');
+      case 'market': return '服务市场';
       case 'feedback': return t('app.feedback');
       default: return t('app.dashboard');
     }
@@ -1212,9 +1252,36 @@ function AppContent() {
 
         {/* Main Container */}
         <div className="flex-1 flex flex-col min-w-0 relative w-full lg:w-auto">
+          {appMode !== '3d' && (
+            <MobileAppChrome
+              activeTab={activeTab}
+              title={getTitle()}
+              primaryItems={mobilePrimaryItems}
+              secondaryItems={mobileSecondaryItems}
+              sections={mobileSections}
+              search={<GlobalSearch mobile onNavigate={handleNavigate} user={user} />}
+              onCalendar={() => window.dispatchEvent(new CustomEvent('open-farm-calendar'))}
+              onNotifications={() => setShowNotifications(true)}
+              onWeather={() => setShowWeatherModal(true)}
+              unreadCount={unreadCount}
+              onNavigate={handleNavigate}
+              onSectionSelect={handleMobileSectionSelect}
+              onSettings={() => setIsSettingsOpen(true)}
+              onLogout={handleLogout}
+            />
+          )}
+          <MobileNotificationsSheet
+            open={showNotifications}
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onClose={() => setShowNotifications(false)}
+            onClearAll={clearAll}
+            onMarkAsRead={markAsRead}
+          />
+
           {/* Top Header */}
           {appMode !== '3d' && (
-            <header className="h-16 lg:h-24 bg-white/40 dark:bg-[#020617]/60 backdrop-blur-3xl border-b border-slate-200/30 dark:border-white/5 flex items-center justify-between px-4 lg:px-12 relative z-30 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <header className="hidden h-16 md:flex lg:h-24 bg-white/40 dark:bg-[#020617]/60 backdrop-blur-3xl border-b border-slate-200/30 dark:border-white/5 items-center justify-between px-4 lg:px-12 relative z-30 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             <div className="flex items-center gap-4 lg:gap-8 flex-1">
               <button 
                 onClick={() => setIsMobileMenuOpen(true)}
@@ -1465,9 +1532,11 @@ function AppContent() {
         )}
 
         {/* Content Area */}
-        <main className={cn(
+        <main data-active-tab={activeTab} className={cn(
           "flex-1 relative overflow-hidden",
-          appMode === 'data' ? "bg-slate-50 dark:bg-[#050505] p-4 lg:p-12 custom-scrollbar hero-gradient" : "bg-black"
+          appMode === 'data'
+            ? "mobile-content bg-slate-50 p-3 pb-[calc(4.75rem+env(safe-area-inset-bottom))] dark:bg-[#050505] md:p-4 md:pb-4 lg:p-12 custom-scrollbar hero-gradient"
+            : "bg-black"
         )}>
           {hasOpened3D && (
             <div className={cn(
@@ -1516,7 +1585,7 @@ function AppContent() {
           {/* Weather Modal */}
           <AnimatePresence>
             {showWeatherModal && (
-              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4">
                 <motion.div 
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -1528,22 +1597,22 @@ function AppContent() {
                   initial={{ scale: 0.9, opacity: 0, y: 20 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
                   exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                  className="relative w-full max-w-2xl bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-2xl rounded-[40px] p-10 shadow-2xl overflow-hidden border border-slate-200/50 dark:border-white/10"
+                  className="relative h-[100dvh] max-h-[100dvh] w-full max-w-2xl overflow-y-auto rounded-none border border-slate-200/50 bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-[#0A0A0A]/95 sm:h-auto sm:max-h-[90dvh] sm:rounded-[40px] sm:p-10"
                 >
                   <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full -mr-32 -mt-32 blur-[100px]" />
                   
-                  <div className="flex justify-between items-start mb-10 relative">
+                  <div className="relative mb-6 flex items-start justify-between sm:mb-10">
                     <div>
-                      <h3 className="text-3xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">气象详情</h3>
+                      <h3 className="mb-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white sm:text-3xl">气象详情</h3>
                       <p className="text-slate-400 dark:text-slate-500 font-black uppercase tracking-[0.2em] text-[10px]">气象预报 · 24小时</p>
                     </div>
-                    <button onClick={() => setShowWeatherModal(false)} className="p-3 bg-slate-100 dark:bg-[#1A1A1A] hover:bg-slate-200 dark:hover:bg-[#2A2A2A] rounded-2xl transition-all border border-slate-200/50 dark:border-white/10">
+                    <button aria-label="关闭气象详情" onClick={() => setShowWeatherModal(false)} className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200/50 bg-slate-100 transition-all hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-emerald-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:hover:bg-[#2A2A2A]">
                       <ChevronLeft className="rotate-180 text-slate-600 dark:text-slate-300" />
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
-                    <div className="bg-gradient-to-br from-forest-green to-emerald-700 p-8 rounded-[32px] text-white shadow-2xl shadow-forest-green/20 relative overflow-hidden group">
+                  <div className="relative grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-8">
+                    <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-forest-green to-emerald-700 p-5 text-white shadow-2xl shadow-forest-green/20 group sm:rounded-[32px] sm:p-8">
                       <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                       <div className="flex justify-between items-start mb-6 relative z-10">
                         {weatherData?.current ? React.createElement(getWeatherIcon(weatherData.current.weather_code), { size: 48, className: "drop-shadow-lg" }) : <CloudSun size={48} className="drop-shadow-lg" />}
@@ -1611,7 +1680,7 @@ function AppContent() {
                     </div>
                   </div>
 
-                  <div className="mt-10 p-6 bg-amber-50/50 dark:bg-amber-900/20 backdrop-blur-md rounded-[24px] border border-amber-100/50 dark:border-amber-500/20 flex items-center gap-4">
+                  <div className="mt-6 flex items-center gap-4 rounded-[24px] border border-amber-100/50 bg-amber-50/50 p-4 backdrop-blur-md dark:border-amber-500/20 dark:bg-amber-900/20 sm:mt-10 sm:p-6">
                     <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
                       <AlertCircle size={20} />
                     </div>

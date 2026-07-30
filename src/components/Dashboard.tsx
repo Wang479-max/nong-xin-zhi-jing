@@ -649,17 +649,18 @@ export default function Dashboard({ onNavigate, user }: DashboardProps) {
       <div className="relative z-10 flex min-h-screen">
 
         {/* Home Dashboard Body Grid */}
-        <main className="flex-1 p-8 lg:p-14 space-y-12 overflow-x-hidden">
+        <main className="flex-1 p-3 sm:p-6 lg:p-14 space-y-5 sm:space-y-8 lg:space-y-12 overflow-x-hidden">
           
           {/* Top Integrated Interactive Cockpit Header */}
           <header className="flex flex-col xxl:flex-row xxl:items-center justify-between gap-8 select-none border-b border-slate-100 dark:border-slate-800 pb-8 transition-colors">
             <div className="flex flex-col gap-2">
-               <div className="flex items-center gap-4">
+               <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                   <div className="px-3 py-1 bg-slate-950 dark:bg-slate-800 text-white text-[10px] font-black rounded-lg uppercase tracking-widest font-mono">
                     PRO MODEL V5.0
                   </div>
-                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-slate-50 tracking-tighter uppercase italic flex items-center gap-2">
-                    <span className="text-emerald-500 not-italic font-black">NONG_XIN</span> 农芯智境系统
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-slate-50 tracking-tighter uppercase italic flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-emerald-500 not-italic font-black">NONG_XIN</span>
+                    <span className="whitespace-nowrap not-italic">农芯智境系统</span>
                   </h1>
                </div>
                <div className="flex items-center gap-4 text-slate-400 text-xs font-bold leading-none">
@@ -697,20 +698,20 @@ export default function Dashboard({ onNavigate, user }: DashboardProps) {
           </header>
 
           {/* 1. Core 4 Stat indicators (平均数据) */}
-          <section id="dashboard-indicators" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-7 lg:gap-10">
+          <section id="dashboard-indicators" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-10">
              {stats.map((stat, i) => (
                <StatCard key={i} {...stat} delay={i * 0.1} />
              ))}
           </section>
 
           {/* Core Content Layout Area */}
-          <div className="grid grid-cols-12 gap-10 lg:gap-12">
+          <div className="grid grid-cols-12 gap-5 sm:gap-8 lg:gap-12">
              
              {/* Left Compartment: Trend fluctuations + Quick commands + System Log Console */}
-             <div className="col-span-12 xl:col-span-8 space-y-10 lg:space-y-12">
+             <div id="dashboard-environment" className="col-span-12 xl:col-span-8 space-y-5 sm:space-y-8 lg:space-y-12">
                 
                 {/* 2. Overhauled 24-Hour Environment Fluctuations Line/Area Chart */}
-                <div id="dashboard-chart-container" className="bg-white/60 dark:bg-slate-900/40 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-[2.5rem] p-6 lg:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative overflow-hidden flex flex-col gap-8 transition-colors">
+                <div id="dashboard-chart-container" className="bg-white/60 dark:bg-slate-900/40 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-2xl sm:rounded-[2rem] lg:rounded-[2.5rem] p-4 sm:p-6 lg:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative overflow-hidden flex flex-col gap-5 sm:gap-8 transition-colors">
                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-50 dark:border-slate-800 transition-colors">
                       <div className="flex items-center gap-3.5">
                          <div className="w-1.5 h-6 bg-slate-900 dark:bg-slate-100 rounded-full" />
@@ -768,7 +769,7 @@ export default function Dashboard({ onNavigate, user }: DashboardProps) {
                    </div>
 
                    {/* Interactive Environment Fluctuations Line/Area Chart using Recharts */}
-                   <div className="h-[280px] relative w-full border border-slate-50 dark:border-white/5 bg-slate-50/20 dark:bg-slate-950/20 rounded-[2rem] p-6 pt-12 flex flex-col justify-between transition-colors">
+                   <div className="h-[230px] sm:h-[280px] relative w-full border border-slate-50 dark:border-white/5 bg-slate-50/20 dark:bg-slate-950/20 rounded-2xl sm:rounded-[2rem] p-4 sm:p-6 pt-12 flex flex-col justify-between transition-colors">
                      <span className="text-[10px] font-black text-slate-400 dark:text-slate-600 absolute left-6 top-6 uppercase tracking-[0.2em] font-mono z-10 transition-colors">{dashboardTimeRange === '7d' ? '7天温湿度趋势分析 (交互式)' : '温湿度实时监控'}</span>
                      {/* Clickable Legend to toggle lines */}
                      <div className="absolute right-6 top-4 flex items-center gap-2 sm:gap-3 z-10 select-none">
@@ -870,7 +871,7 @@ export default function Dashboard({ onNavigate, user }: DashboardProps) {
                 />
 
                 {/* 3. Comprehensive Quick Actions 8 REQUIRED items Bento-grid Panel */}
-                <div id="dashboard-quick-actions" className="bg-white/60 dark:bg-slate-900/40 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-[2.5rem] p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative overflow-hidden flex flex-col gap-8">
+                <div id="dashboard-quick-actions" className="bg-white/60 dark:bg-slate-900/40 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative overflow-hidden flex flex-col gap-5 sm:gap-8">
                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-50 dark:border-slate-800 transition-colors select-none">
                       <div className="flex items-center gap-3.5">
                          <div className="w-1.5 h-6 bg-slate-900 dark:bg-slate-100 rounded-full" />
@@ -883,13 +884,13 @@ export default function Dashboard({ onNavigate, user }: DashboardProps) {
                       </span>
                    </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5">
                       {operations.map(op => {
                         const Icon = op.icon;
                         return (
                           <TiltCard 
                             key={op.id}
-                            className="group cursor-pointer relative p-6 border border-slate-100 dark:border-white/5 rounded-[2rem] bg-slate-50/50 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-slate-350 dark:hover:border-slate-600 hover:shadow-2xl hover:shadow-slate-200/60 dark:hover:shadow-black/40 h-42 overflow-hidden"
+                            className="group cursor-pointer relative p-4 sm:p-6 border border-slate-100 dark:border-white/5 rounded-2xl sm:rounded-[2rem] bg-slate-50/50 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 hover:border-slate-350 dark:hover:border-slate-600 hover:shadow-2xl hover:shadow-slate-200/60 dark:hover:shadow-black/40 h-42 overflow-hidden"
                           >
                              <div onClick={() => handleOpLaunch(op.id)} className="flex flex-col justify-between h-full">
                                <div className={cn(
@@ -971,7 +972,7 @@ export default function Dashboard({ onNavigate, user }: DashboardProps) {
              </div>
 
              {/* Right Compartment: Weather radar + Plot Observation alerts */}
-             <div className="col-span-12 xl:col-span-4 space-y-10 lg:space-y-12">
+             <div className="col-span-12 xl:col-span-4 space-y-5 sm:space-y-8 lg:space-y-12">
                 
                  {/* 7. Quick Task Template Container */}
                  <div className="bg-white/60 dark:bg-slate-900/40 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-[2.5rem] p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative overflow-hidden flex flex-col gap-6">
@@ -1080,7 +1081,7 @@ export default function Dashboard({ onNavigate, user }: DashboardProps) {
                 <WeatherWidgetPro addSystemLog={addSystemLog} />
 
                 {/* 6. Landscape Map Field Status Observation Alerts Container */}
-                <div className="bg-white/60 dark:bg-slate-900/40 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-[2.5rem] p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative overflow-hidden flex flex-col gap-6">
+                <div id="dashboard-alerts" className="bg-white/60 dark:bg-slate-900/40 backdrop-blur-2xl border border-slate-200/50 dark:border-white/10 rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] relative overflow-hidden flex flex-col gap-6">
                    <div className="flex items-center justify-between pb-4 border-b border-slate-50 dark:border-slate-800 select-none">
                       <div className="flex items-center gap-3">
                          <div className="w-1.5 h-6 bg-slate-900 dark:bg-slate-100 rounded-full" />

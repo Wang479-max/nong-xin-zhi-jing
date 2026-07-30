@@ -580,10 +580,10 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
   const currentPlot = plots.find(p => p.id === activePlot);
 
   return (
-    <div className="flex flex-col gap-6 h-full animate-in fade-in duration-500">
+    <div className="flex flex-col gap-4 sm:gap-6 min-h-full animate-in fade-in duration-500">
 
       {viewMode === '3d' ? (
-        <div className="flex-1 min-h-[600px] rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl">
+        <div id="management-map" className="flex-1 min-h-[70dvh] lg:min-h-[600px] rounded-2xl lg:rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl">
           <DigitalTwin 
             plots={plots}
             activePlotId={activePlot}
@@ -600,7 +600,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Plot Selector Sidebar */}
-          <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-8">
+          <div id="management-fields" className="lg:col-span-4 space-y-4 lg:sticky lg:top-8">
           <div className="flex items-center justify-between mb-2 px-2">
             <h2 className="text-sm font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('management.list.title')}</h2>
             <span className="text-[10px] font-black text-forest-green bg-forest-green/10 px-2 py-0.5 rounded-full">
@@ -608,7 +608,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
             </span>
           </div>
           
-          <div id="field-plots-list" className="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar">
+          <div id="field-plots-list" className="space-y-3 max-h-[55dvh] lg:max-h-[calc(100vh-250px)] overflow-y-auto pr-2 custom-scrollbar">
             {plots.length === 0 ? (
               <EmptyState 
                 icon={<MapIcon size={48} />} 
@@ -726,7 +726,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
           )}
 
           {/* Quick Stats Grid */}
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-4">
             <h2 className="text-xl font-black text-slate-800 dark:text-white">{currentPlot?.name || '数据概览'}</h2>
             <button
               onClick={() => {
@@ -758,14 +758,14 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
                   setIsGeneratingTraceCode(false);
                 }, 1500);
               }}
-              className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-lg shadow-emerald-500/20 text-sm"
+              className="min-h-11 w-full sm:w-auto px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition shadow-lg shadow-emerald-500/20 text-sm"
             >
               <QrCode size={18} />
               生成追溯码
             </button>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard 
               label={t('management.stats.totalArea')} 
               value={plots.reduce((acc, p) => acc + p.area, 0).toString()} 
@@ -1373,7 +1373,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
         </section>
 
         {/* Hardware Control Section */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 relative">
+        <section id="management-operations" className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 relative">
           {currentPlot?.status === 'pending_setup' && (
             <div className="absolute inset-0 z-20 bg-white/60 dark:bg-black/60 backdrop-blur-[4px] rounded-[32px] flex flex-col items-center justify-center text-center p-8 border border-dashed border-indigo-500/30">
               <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mb-4 border border-amber-200 dark:border-amber-500/30">
@@ -1542,7 +1542,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
         </section>
 
         {/* 农事工单与协作空间 & 区块链存证 (国赛增强) */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 mt-4 sm:mt-8">
           {/* 任务工单与进度跟踪 */}
           <div className="bg-white/80 dark:bg-[#121214]/80 backdrop-blur-xl p-8 rounded-[40px] shadow-xl border border-slate-100 dark:border-white/5 relative overflow-hidden flex flex-col justify-between">
               <div className="flex justify-between items-start mb-6 relative z-10">
@@ -1622,7 +1622,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
           </div>
 
           {/* 区块链轻量级溯源存证 */}
-          <div className="bg-white/80 dark:bg-[#121214]/80 border border-slate-100 dark:border-white/5 p-8 rounded-[40px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-300">
+          <div id="management-archive" className="bg-white/80 dark:bg-[#121214]/80 border border-slate-100 dark:border-white/5 p-4 sm:p-8 rounded-2xl sm:rounded-[40px] shadow-xl relative overflow-hidden flex flex-col justify-between transition-all duration-300">
             <div className="absolute top-0 right-0 p-8 opacity-5 dark:opacity-10 pointer-events-none">
               <Link2 size={120} className="text-emerald-500" />
             </div>
@@ -1782,7 +1782,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       {/* 硬件参数设置弹窗 */}
       <AnimatePresence>
         {showSettingsModal && settingsType && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1794,7 +1794,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-md bg-white dark:bg-[#121214] rounded-[32px] p-8 shadow-2xl border border-slate-100 dark:border-white/10"
+              className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto bg-white dark:bg-[#121214] rounded-t-3xl sm:rounded-[32px] p-4 sm:p-8 shadow-2xl border border-slate-100 dark:border-white/10"
             >
               <button 
                 onClick={() => setShowSettingsModal(false)}
@@ -1957,7 +1957,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       {/* 添加地块弹窗 */}
       <AnimatePresence>
         {showAddModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1969,7 +1969,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-md bg-white dark:bg-[#0A0A0A] rounded-[32px] p-10 shadow-2xl border border-transparent dark:border-white/10"
+              className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto bg-white dark:bg-[#0A0A0A] rounded-t-3xl sm:rounded-[32px] p-4 sm:p-10 shadow-2xl border border-transparent dark:border-white/10"
             >
               <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-8 flex items-center gap-3">
                 <Plus className="text-forest-green dark:text-emerald-400" />
@@ -2056,7 +2056,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
         )}
 
         {showConnectModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2071,7 +2071,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-2xl bg-white dark:bg-[#0A0A0A] rounded-[40px] p-10 shadow-2xl border border-transparent dark:border-white/10"
+              className="relative w-full max-w-2xl max-h-[90dvh] overflow-y-auto bg-white dark:bg-[#0A0A0A] rounded-t-3xl sm:rounded-[40px] p-4 sm:p-10 shadow-2xl border border-transparent dark:border-white/10"
             >
               <AnimatePresence>
                 {showConnectTutorial && (
@@ -2193,7 +2193,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
 
         {/* 派发新农事工单 Modal Overlay */}
         {showWorkOrderModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -2205,7 +2205,7 @@ const FieldManagement: React.FC<{ user: any, onNavigate: (tab: string) => void, 
               initial={{ scale: 0.95, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              className="relative w-full max-w-xl bg-white dark:bg-[#121214] rounded-[32px] p-8 shadow-2xl border border-slate-100 dark:border-white/5 z-10"
+              className="relative w-full max-w-xl max-h-[90dvh] overflow-y-auto bg-white dark:bg-[#121214] rounded-t-3xl sm:rounded-[32px] p-4 sm:p-8 shadow-2xl border border-slate-100 dark:border-white/5 z-10"
             >
               <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-2">
                 <ClipboardList className="text-indigo-500" />

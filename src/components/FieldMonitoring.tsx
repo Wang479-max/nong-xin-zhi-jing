@@ -900,10 +900,10 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 animate-in fade-in duration-500">
       {/* 0. 地块选择器 (保留原有) */}
-      <section className="flex items-center justify-between bg-white/80 dark:bg-[#121214]/40 backdrop-blur-xl p-6 rounded-[32px] card-shadow border border-slate-100 dark:border-white/5 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none">
-        <div className="flex items-center gap-4">
+      <section className="flex flex-col items-stretch justify-between gap-4 bg-white/80 dark:bg-[#121214]/40 backdrop-blur-xl p-4 sm:flex-row sm:items-center sm:p-6 rounded-2xl sm:rounded-[32px] card-shadow border border-slate-100 dark:border-white/5 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none">
+        <div className="flex min-w-0 items-center gap-4">
           <div className="w-10 h-10 bg-forest-green/10 text-forest-green dark:text-emerald-400 rounded-xl flex items-center justify-center border border-slate-100 dark:border-white/5">
             <LayoutDashboard size={20} />
           </div>
@@ -912,13 +912,13 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
             <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">{t('monitoring.sidebar.desc')}</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="mobile-scroll-row w-full gap-2 sm:w-auto">
           {plots.map(plot => (
             <button
               key={plot.id}
               onClick={() => setActivePlot(plot.id)}
               className={cn(
-                "px-6 py-2 rounded-xl text-sm font-black transition-all active:scale-95",
+                "min-h-11 shrink-0 px-4 py-2 sm:px-6 rounded-xl text-sm font-black transition-all active:scale-95",
                 activePlot === plot.id 
                   ? "bg-forest-green text-white shadow-lg shadow-forest-green/20" 
                   : "bg-slate-50 dark:bg-[#0A0A0A]/50 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#1A1A1A] border border-slate-100 dark:border-white/5"
@@ -931,7 +931,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       </section>
 
       {/* 概览仪表盘 - D3雷达图综合分析 */}
-      <section className="bg-white/80 dark:bg-[#121214]/40 backdrop-blur-xl p-8 rounded-[40px] border border-slate-100 dark:border-white/5 shadow-2xl relative overflow-hidden transition-colors flex flex-col xl:flex-row gap-8 items-center justify-between">
+      <section className="bg-white/80 dark:bg-[#121214]/40 backdrop-blur-xl p-4 sm:p-8 rounded-2xl sm:rounded-[40px] border border-slate-100 dark:border-white/5 shadow-2xl relative overflow-hidden transition-colors flex flex-col xl:flex-row gap-4 sm:gap-8 items-center justify-between">
         <div className="flex-1 space-y-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-2xl flex items-center justify-center border border-emerald-500/20">
@@ -958,7 +958,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
              </div>
           </div>
         </div>
-        <div className="w-full xl:w-auto flex justify-center items-center bg-slate-50 dark:bg-slate-900/50 p-6 rounded-[32px] border border-slate-100 dark:border-white/5">
+        <div className="w-full max-w-full overflow-hidden xl:w-auto flex justify-center items-center bg-slate-50 dark:bg-slate-900/50 p-2 sm:p-6 rounded-2xl sm:rounded-[32px] border border-slate-100 dark:border-white/5 [&>svg]:max-w-full">
           <RadarChartD3 
             data={[
               { axis: "土壤肥力", value: realtimeData?.soilMoisture ? Math.min(100, realtimeData.soilMoisture * 1.5) : 85 },
@@ -975,13 +975,13 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       </section>
 
       {/* 0.3 多源数据融合预警模型 & 空间化热力图预警 (国赛级增强) */}
-      <section id="monitoring-realtime-grid" className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#121214]/60 dark:to-[#0A0A0C]/80 backdrop-blur-xl p-8 rounded-[40px] border border-slate-100 dark:border-white/5 shadow-2xl relative overflow-hidden transition-colors">
+      <section id="monitoring-realtime-grid" className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+        <div id="monitoring-alerts" className="xl:col-span-2 bg-gradient-to-br from-white to-slate-50/50 dark:from-[#121214]/60 dark:to-[#0A0A0C]/80 backdrop-blur-xl p-4 sm:p-8 rounded-2xl sm:rounded-[40px] border border-slate-100 dark:border-white/5 shadow-2xl relative overflow-hidden transition-colors">
            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
              <AlertCircle size={120} className="text-rose-500" />
            </div>
            
-           <div className="flex items-center justify-between mb-8 relative z-10">
+           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center mb-6 sm:mb-8 relative z-10">
               <div className="flex items-center gap-4">
                  <div className="w-12 h-12 bg-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center border border-rose-500/30">
                    <Zap size={24} />
@@ -1052,7 +1052,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
            </div>
         </div>
 
-        <div className="bg-white/80 dark:bg-[#121214]/80 backdrop-blur-xl p-8 rounded-[40px] border border-slate-100 dark:border-white/5 shadow-xl relative overflow-hidden flex flex-col">
+        <div className="bg-white/80 dark:bg-[#121214]/80 backdrop-blur-xl p-4 sm:p-8 rounded-2xl sm:rounded-[40px] border border-slate-100 dark:border-white/5 shadow-xl relative overflow-hidden flex flex-col">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
               <MapIcon size={18} />
@@ -1136,7 +1136,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       </section>
 
       {/* 0.5. 所有地块实时概览 */}
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <section id="monitoring-devices" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {plots.map(plot => {
           const data = allPlotsData[plot.id];
           if (!data) return null;
@@ -1146,7 +1146,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
               id={`plot-card-${plot.id}`}
               onClick={() => setActivePlot(plot.id)}
               className={cn(
-                "bg-white/80 dark:bg-[#050505]/40 backdrop-blur-xl rounded-[32px] p-6 card-shadow border transition-all duration-500 cursor-pointer hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none relative overflow-hidden",
+                "bg-white/80 dark:bg-[#050505]/40 backdrop-blur-xl rounded-2xl sm:rounded-[32px] p-4 sm:p-6 card-shadow border transition-all duration-500 cursor-pointer hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none relative overflow-hidden",
                 activePlot === plot.id ? "border-forest-green dark:border-emerald-500 shadow-lg shadow-forest-green/10" : "border-slate-100 dark:border-white/5"
               )}
             >
@@ -1161,7 +1161,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
                   {plot.crop}
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-y-6 gap-x-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 sm:gap-y-6 gap-x-4">
                 {[
                   { key: 'temperature', icon: <Thermometer size={14} /> },
                   { key: 'humidity', icon: <Droplets size={14} /> },
@@ -1228,8 +1228,9 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       </section>
 
       {/* 2. 中部图表分析区 */}
-      <section id="monitoring-chart-section" className="bg-white/80 dark:bg-[#050505]/40 backdrop-blur-xl rounded-[40px] card-shadow p-8 border border-slate-100 dark:border-white/5 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      <section id="monitoring-trends" className="bg-white/80 dark:bg-[#050505]/40 backdrop-blur-xl rounded-2xl sm:rounded-[40px] card-shadow p-4 sm:p-8 border border-slate-100 dark:border-white/5 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none">
+        <span id="monitoring-chart-section" className="sr-only" aria-hidden="true" />
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5 sm:mb-8">
           <div className="flex items-center gap-4">
             <h3 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">
               {chartPlotId === 'all' ? t('monitoring.chart.allPlots') : t('monitoring.chart.trendAnalysis', { name: plots.find(p => p.id === chartPlotId)?.name || '' })}
@@ -1491,7 +1492,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       </section>
 
       {/* AI 语音巡检备忘录模块 */}
-      <section className="bg-white/85 dark:bg-[#121214]/65 backdrop-blur-xl rounded-[40px] card-shadow p-8 border border-slate-100 dark:border-white/5 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none">
+      <section className="bg-white/85 dark:bg-[#121214]/65 backdrop-blur-xl rounded-2xl sm:rounded-[40px] card-shadow p-4 sm:p-8 border border-slate-100 dark:border-white/5 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-forest-green/10 text-forest-green dark:text-emerald-400 rounded-2xl flex items-center justify-center border border-forest-green/20">
@@ -1828,7 +1829,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       </section>
 
       {/* 3. 底部历史记录列表 */}
-      <section className="bg-white/80 dark:bg-[#050505]/40 backdrop-blur-xl rounded-[40px] card-shadow p-8 border border-slate-100 dark:border-white/10 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none">
+      <section className="bg-white/80 dark:bg-[#050505]/40 backdrop-blur-xl rounded-2xl sm:rounded-[40px] card-shadow p-4 sm:p-8 border border-slate-100 dark:border-white/10 transition-all duration-500 hover:shadow-2xl hover:shadow-slate-200/50 dark:hover:shadow-none">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2 tracking-tight">
             <History className="text-forest-green dark:text-emerald-400" size={22} />
@@ -1936,7 +1937,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
       <AnimatePresence>
         {detailItem && (
           <SafePortal key="detail-item-modal-portal">
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1948,7 +1949,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-5xl bg-white/90 dark:bg-[#050505]/95 backdrop-blur-2xl rounded-[32px] sm:rounded-[40px] shadow-2xl border border-white/20 dark:border-white/10 flex flex-col max-h-[85vh] sm:max-h-[90vh] overflow-hidden m-4"
+              className="relative w-full max-w-5xl bg-white/90 dark:bg-[#050505]/95 backdrop-blur-2xl rounded-t-3xl sm:rounded-[40px] shadow-2xl border border-white/20 dark:border-white/10 flex flex-col max-h-[90dvh] sm:max-h-[90vh] overflow-hidden m-0 sm:m-4"
             >
               {/* Sticky Header */}
               <div className="p-4 sm:p-6 lg:p-8 pb-4 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0">
@@ -2430,7 +2431,7 @@ const FieldMonitoring: React.FC<{ user: any, onNavigate: (tab: string) => void, 
                 </div>
 
                 {/* PDF Document Wrapper for html-to-image (A4 aspect-ratio mockup) */}
-                <div className="flex-1 overflow-y-auto p-8 flex justify-center bg-slate-200/50 dark:bg-slate-900/30">
+                <div className="flex-1 overflow-auto p-3 sm:p-8 flex justify-start sm:justify-center bg-slate-200/50 dark:bg-slate-900/30">
                   <div 
                     ref={reportRef}
                     className="w-[790px] bg-white text-slate-900 p-10 shadow-lg rounded-sm border border-slate-200/60 font-sans flex flex-col gap-6 relative shrink-0"
