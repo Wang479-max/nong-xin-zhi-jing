@@ -867,15 +867,15 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
   };
 
   return (
-    <div className="flex flex-col h-full gap-8">
+    <div className="flex flex-col h-full gap-4 sm:gap-8">
       <ShareModal />
       <UgcModal />
       {/* 顶部搜索栏 */}
       <div className="flex flex-col gap-5">
-        <div id="knowledge-search-container" className="bg-white/80 dark:bg-[#0A0A0A]/60 backdrop-blur-2xl p-8 rounded-[40px] shadow-2xl shadow-black/5 flex items-center gap-6 border border-white/40 dark:border-white/10 relative overflow-hidden group">
+        <div id="knowledge-search-container" className="sticky top-0 z-30 bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-2xl p-3 sm:p-8 rounded-2xl sm:rounded-[40px] shadow-2xl shadow-black/5 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-6 border border-white/40 dark:border-white/10 overflow-hidden group md:static">
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-teal-500/5 opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
           
-          <div className="flex-1 flex items-center gap-5 bg-slate-50/80 dark:bg-[#121214]/50 px-8 py-4 rounded-3xl border border-slate-200/50 dark:border-white/10 focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-all shadow-inner">
+          <div className="flex-1 flex items-center gap-3 sm:gap-5 bg-slate-50/80 dark:bg-[#121214]/50 px-4 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-3xl border border-slate-200/50 dark:border-white/10 focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-all shadow-inner">
             <Search className="text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={24} />
             <input 
               type="text" 
@@ -889,7 +889,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
           <button 
             onClick={() => handleSearch(searchQuery)}
             disabled={isLoading}
-            className="px-10 py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-3xl font-black text-lg flex items-center gap-3 hover:shadow-2xl hover:shadow-emerald-500/30 transition-all disabled:opacity-50 relative overflow-hidden active:scale-95"
+            className="min-h-11 w-full sm:w-auto px-6 sm:px-10 py-3 sm:py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl sm:rounded-3xl font-black text-sm sm:text-lg flex items-center justify-center gap-3 hover:shadow-2xl hover:shadow-emerald-500/30 transition-all disabled:opacity-50 relative overflow-hidden active:scale-95"
           >
             {isLoading ? (
               <div className="flex items-center gap-3">
@@ -944,7 +944,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
       <div className="flex flex-col lg:flex-row gap-8 flex-1 overflow-hidden">
         {/* 仅在未选择具体文章/手册阅读时，才显示功能侧边栏，为具体阅读留出 100% 沉浸式宽幅空间 */}
         {!(manual || selectedArticle) && (
-          <div className="w-full lg:w-80 flex flex-col gap-6 shrink-0 overflow-y-auto pr-2 custom-scrollbar">
+          <div className="mobile-scroll-row w-full gap-4 shrink-0 pb-2 lg:w-80 lg:flex-col lg:gap-6 lg:overflow-y-auto lg:pr-2 lg:pb-0 custom-scrollbar [&>div]:min-w-[260px] lg:[&>div]:min-w-0">
             
             {/* 我的收藏与全部品类 */}
             <div className="bg-white/90 dark:bg-[#0E0E12]/80 backdrop-blur-2xl rounded-3xl shadow-xl shadow-black/5 p-6 border border-slate-100 dark:border-white/5 flex flex-col gap-4">
@@ -1220,11 +1220,11 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.98, y: -20 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="bento-card p-12 relative overflow-hidden min-h-full"
+                className="bento-card p-4 sm:p-8 lg:p-12 relative overflow-hidden min-h-full"
               >
                 <button 
                   onClick={() => setSelectedArticle(null)}
-                  className="mb-10 flex items-center gap-3 text-slate-400 hover:text-emerald-600 transition-all font-black text-sm group"
+                  className="sticky top-0 z-30 mb-5 sm:mb-10 flex min-h-11 items-center gap-3 bg-white/95 py-2 text-slate-500 hover:text-emerald-600 transition-all font-black text-sm group dark:bg-[#0A0A0A]/95"
                 >
                   <div className="w-10 h-10 rounded-2xl bg-slate-50 dark:bg-[#1A1A1A] flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all shadow-sm">
                     <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
@@ -1267,7 +1267,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
                     )}
                   </div>
 
-                  <div className="h-[400px] w-full rounded-[40px] overflow-hidden mb-10 border border-slate-100 dark:border-white/10 shadow-2xl relative group">
+                  <div className="h-[220px] sm:h-[400px] w-full rounded-2xl sm:rounded-[40px] overflow-hidden mb-6 sm:mb-10 border border-slate-100 dark:border-white/10 shadow-2xl relative group">
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 z-10" />
                     <img 
                       src={`https://picsum.photos/seed/agri-${selectedArticle.img}/1200/800`} 
@@ -1277,7 +1277,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
                     />
                   </div>
 
-                  <h2 className="text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white mb-6 leading-tight tracking-tight">{selectedArticle.title}</h2>
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 dark:text-white mb-6 leading-tight tracking-tight break-words">{selectedArticle.title}</h2>
                   
                   {/* 智能自习与田间交互语音面板 */}
                   <div className="bg-slate-50 dark:bg-[#111113]/80 rounded-3xl p-6 border border-slate-100 dark:border-white/5 mb-10 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
@@ -1535,7 +1535,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-10">
+                <div className="grid grid-cols-1 min-[380px]:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 pb-10">
                   {error ? (
                     <div className="col-span-full py-20 flex flex-col items-center justify-center text-center">
                       <div className="w-20 h-20 bg-rose-50 dark:bg-rose-900/10 rounded-full flex items-center justify-center mb-6 text-rose-500">
@@ -1574,7 +1574,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
                           onClick={() => setSelectedArticle(article)}
                           className="bg-white/80 dark:bg-[#0A0A0A]/60 backdrop-blur-xl rounded-2xl shadow-sm hover:shadow-[0_20px_35px_rgba(16,185,129,0.12)] hover:dark:shadow-[0_20px_35px_rgba(16,185,129,0.08)] overflow-hidden group cursor-pointer hover:-translate-y-2 transition-all duration-300 ease-out relative border border-slate-100 dark:border-white/5 hover:border-emerald-500/30 dark:hover:border-emerald-500/20 flex flex-col h-full"
                         >
-                          <div className="h-48 bg-slate-100 dark:bg-[#050505] overflow-hidden relative">
+                       <div className="h-36 sm:h-48 bg-slate-100 dark:bg-[#050505] overflow-hidden relative">
                             <ArticleImage 
                               src={`https://picsum.photos/seed/agri-${article.img}/600/400`} 
                               alt={article.title} 
@@ -1589,7 +1589,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
                               <Heart size={14} fill="currentColor" />
                             </button>
                           </div>
-                          <div className="p-5 flex-1 flex flex-col justify-between">
+                       <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
                             <div>
                               <div className="flex justify-between items-start mb-3">
                                 <h4 className="font-black text-slate-800 dark:text-white line-clamp-2 leading-snug group-hover:text-forest-green transition-colors text-base flex-1">
@@ -1760,7 +1760,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
                     rightContentRef.current.scrollTop = 0;
                   }
                 }}
-                className="absolute bottom-8 right-12 z-[40] flex items-center gap-3 px-8 py-4 bg-emerald-600 dark:bg-emerald-500 hover:bg-emerald-700 dark:hover:bg-emerald-600 text-white font-black text-sm shadow-2xl shadow-emerald-500/30 dark:shadow-emerald-500/20 hover:shadow-emerald-500/40 border border-emerald-400/30 group cursor-pointer transition-all active:scale-95 rounded-full"
+                 className="absolute bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-3 sm:bottom-8 sm:right-12 z-[40] flex min-h-11 items-center gap-2 sm:gap-3 px-5 sm:px-8 py-3 sm:py-4 bg-emerald-600 dark:bg-emerald-500 hover:bg-emerald-700 dark:hover:bg-emerald-600 text-white font-black text-xs sm:text-sm shadow-2xl shadow-emerald-500/30 dark:shadow-emerald-500/20 hover:shadow-emerald-500/40 border border-emerald-400/30 group cursor-pointer transition-all active:scale-95 rounded-full"
               >
                 <div className="w-6 h-6 rounded-xl bg-white/20 flex items-center justify-center group-hover:-translate-x-1 transition-transform">
                   <ArrowLeft size={14} className="text-white" />
@@ -1773,7 +1773,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
           {/* AI 深度文章精算解读 Modal Overlay */}
           <AnimatePresence>
             {showDeepAnalysisModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
                 <motion.div 
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -1785,7 +1785,7 @@ const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ user, initialQuery, onQue
                   initial={{ scale: 0.95, opacity: 0, y: 15 }}
                   animate={{ scale: 1, opacity: 1, y: 0 }}
                   exit={{ scale: 0.95, opacity: 0, y: 15 }}
-                  className="relative w-full max-w-xl bg-white dark:bg-[#0c0c0e] rounded-[36px] p-8 shadow-2xl border border-slate-100 dark:border-white/5 overflow-hidden max-h-[90vh] overflow-y-auto custom-scrollbar z-10"
+                  className="relative w-full max-w-xl bg-white dark:bg-[#0c0c0e] rounded-t-3xl sm:rounded-[36px] p-4 sm:p-8 shadow-2xl border border-slate-100 dark:border-white/5 overflow-hidden max-h-[90dvh] overflow-y-auto custom-scrollbar z-10"
                 >
                   <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/5 blur-[80px] rounded-full pointer-events-none" />
                   

@@ -236,7 +236,7 @@ const NewsDetailModal = React.memo<NewsDetailModalProps>(({ news, onClose }) => 
         transition={{ duration: 0.3, ease: "easeOut" }}
         className="relative flex-1 flex flex-col z-10 w-full h-full"
       >
-        <div className="flex justify-between items-center gap-4 px-6 py-4 border-b border-slate-200 dark:border-white/10 shrink-0 bg-white/95 dark:bg-[#0e0e11]/95 backdrop-blur-md shadow-sm">
+        <div className="sticky top-0 z-30 flex justify-between items-center gap-3 px-3 sm:px-6 py-3 sm:py-4 border-b border-slate-200 dark:border-white/10 shrink-0 bg-white/95 dark:bg-[#0e0e11]/95 backdrop-blur-md shadow-sm">
           <div className="flex items-center gap-4 min-w-0 flex-1">
             <button 
               onClick={onClose}
@@ -712,7 +712,7 @@ const NewsDetailModal = React.memo<NewsDetailModalProps>(({ news, onClose }) => 
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ x: "100%", opacity: 0.9 }}
                 transition={{ type: "spring", damping: 25, stiffness: 180 }}
-                className="w-96 md:w-[420px] h-full bg-white/95 dark:bg-[#0d0d10]/95 backdrop-blur-2xl border-l border-slate-200 dark:border-white/10 shadow-2xl z-20 flex flex-col shrink-0"
+                className="w-full sm:w-96 md:w-[420px] h-full bg-white/95 dark:bg-[#0d0d10]/95 backdrop-blur-2xl border-l border-slate-200 dark:border-white/10 shadow-2xl z-20 flex flex-col shrink-0"
               >
                 <div className="p-6 border-b border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-black/20 shrink-0">
                   <div className="flex items-center gap-2.5">
@@ -942,7 +942,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
   }, []);
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 pb-20">
+    <div className="space-y-5 sm:space-y-8 max-w-7xl mx-auto px-0 sm:px-4 pb-20">
       <AnimatePresence>
         {showDetailModal && (
           <NewsDetailModal 
@@ -953,7 +953,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
       </AnimatePresence>
 
       {/* Header & Refresh */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 sm:mb-8">
          <div>
             <h1 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-3">
                <Newspaper className="text-emerald-500" size={32} />
@@ -966,7 +966,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
          <button 
            onClick={handleManualSync}
            disabled={isRefreshing}
-           className="flex items-center gap-2 px-6 py-3 bg-white dark:bg-[#121214] border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm hover:shadow-emerald-500/10 hover:border-emerald-500/50 transition-all font-black text-sm text-slate-700 dark:text-white disabled:opacity-50"
+           className="flex min-h-11 w-full sm:w-auto items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-[#121214] border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm hover:shadow-emerald-500/10 hover:border-emerald-500/50 transition-all font-black text-sm text-slate-700 dark:text-white disabled:opacity-50"
          >
            <RefreshCw size={18} className={cn("text-emerald-500", isRefreshing && "animate-spin")} />
            {isRefreshing ? '同步中...' : '立即刷新'}
@@ -974,7 +974,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
       </div>
 
       {/* Featured News Carousel */}
-      <div className="relative h-[450px] rounded-[48px] overflow-hidden shadow-2xl shadow-emerald-500/10 group border border-white/20 dark:border-white/5">
+      <div className="relative h-[280px] md:h-[450px] rounded-2xl md:rounded-[48px] overflow-hidden shadow-2xl shadow-emerald-500/10 group border border-white/20 dark:border-white/5">
         <AnimatePresence mode="wait">
             {featuredNews.length > 0 && (
             <motion.div
@@ -993,7 +993,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
                 referrerPolicy="no-referrer"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-              <div className="absolute inset-0 p-12 flex flex-col justify-end">
+              <div className="absolute inset-0 p-4 sm:p-8 md:p-12 flex flex-col justify-end">
                 <div className="max-w-3xl space-y-6">
                   <motion.div 
                     initial={{ opacity: 0, x: -20 }}
@@ -1013,7 +1013,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
-                    className="text-5xl md:text-6xl font-black text-white leading-tight tracking-tight drop-shadow-2xl"
+                    className="text-2xl sm:text-4xl md:text-6xl font-black text-white leading-tight tracking-tight drop-shadow-2xl line-clamp-3"
                   >
                     {featuredNews[currentFeatured].title}
                   </motion.h2>
@@ -1032,7 +1032,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
         </AnimatePresence>
 
         {/* Carousel Indicators */}
-        <div className="absolute bottom-10 right-12 flex gap-3 z-10">
+        <div className="absolute bottom-4 right-4 md:bottom-10 md:right-12 flex gap-3 z-10">
           {featuredNews.map((_, i) => (
             <button 
               key={i}
@@ -1050,8 +1050,8 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
         {/* Main Content */}
         <div className="lg:col-span-3 space-y-6">
           {/* Controls Bar */}
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white/80 dark:bg-[#0A0A0A]/60 backdrop-blur-2xl p-4 rounded-[32px] border border-white/20 dark:border-white/5 shadow-2xl shadow-black/5">
-            <div className="flex bg-slate-100/50 dark:bg-white/5 p-1.5 rounded-2xl border border-slate-200/50 dark:border-white/5">
+          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-white/80 dark:bg-[#0A0A0A]/60 backdrop-blur-2xl p-3 sm:p-4 rounded-2xl md:rounded-[32px] border border-white/20 dark:border-white/5 shadow-2xl shadow-black/5">
+            <div className="mobile-scroll-row w-full gap-1 bg-slate-100/50 dark:bg-white/5 p-1.5 rounded-2xl border border-slate-200/50 dark:border-white/5">
               {[
                 { id: 'all', label: t('knowledge.categories.all'), icon: Newspaper },
                 { id: 'policy', label: t('knowledge.categories.policy'), icon: Gavel },
@@ -1062,7 +1062,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
                   key={tab.id} 
                   onClick={() => setActiveTab(tab.id as any)}
                   className={cn(
-                    "px-6 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all duration-300",
+                    "min-h-11 shrink-0 px-4 sm:px-6 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all duration-300",
                     activeTab === tab.id 
                       ? "bg-white dark:bg-white/10 text-emerald-600 dark:text-emerald-400 shadow-lg shadow-emerald-500/10 scale-105" 
                       : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-white/30 dark:hover:bg-white/5"
@@ -1145,7 +1145,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
                   />
                 </motion.div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-3 md:block md:space-y-4">
                   {newsList.map((item, i) => (
                     <motion.div
                       key={i}
@@ -1153,9 +1153,9 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.05, ease: "easeOut" }}
                       onClick={(e) => handleNewsClick(e, item)}
-                      className="bento-card p-6 flex gap-6 group hover:translate-x-2 transition-all duration-500 cursor-pointer"
+                      className="bento-card p-3 md:p-6 flex flex-col md:flex-row gap-3 md:gap-6 group md:hover:translate-x-2 transition-all duration-500 cursor-pointer min-w-0"
                     >
-                      <div className="w-44 h-32 bg-slate-100 dark:bg-white/5 rounded-[24px] overflow-hidden flex-shrink-0 relative shadow-inner">
+                      <div className="w-full h-28 md:w-44 md:h-32 bg-slate-100 dark:bg-white/5 rounded-2xl md:rounded-[24px] overflow-hidden flex-shrink-0 relative shadow-inner">
                         <img 
                           src={`https://picsum.photos/seed/agri-news-${i}/400/300`} 
                           alt="News" 
@@ -1169,7 +1169,7 @@ const NewsModule: React.FC<NewsModuleProps> = ({ user, initialNewsId }) => {
                       <div className="flex-1 flex flex-col justify-between py-1">
                         <div>
                           <div className="flex justify-between items-start mb-2">
-                            <h4 className="text-xl font-black text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-2 leading-tight tracking-tight flex-1">
+                            <h4 className="text-sm md:text-xl font-black text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-2 leading-tight tracking-tight flex-1 min-w-0 break-words">
                               {item.title}
                             </h4>
                             <button 

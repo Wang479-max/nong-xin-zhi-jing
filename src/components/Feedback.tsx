@@ -118,7 +118,7 @@ const Feedback: React.FC<FeedbackProps> = ({ user }) => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto p-3 sm:p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <MessageSquare className="w-6 h-6 text-green-600" />
@@ -129,11 +129,11 @@ const Feedback: React.FC<FeedbackProps> = ({ user }) => {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 glass-panel p-8 rounded-2xl shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6 glass-panel p-4 sm:p-8 rounded-2xl shadow-sm">
         {/* Feedback Type */}
         <div>
           <label className="block text-sm font-black text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-widest">反馈类型</label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
             {feedbackTypes.map((item) => (
               <button
                 key={item.id}
@@ -182,7 +182,7 @@ const Feedback: React.FC<FeedbackProps> = ({ user }) => {
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
-                  className="relative w-32 h-32 rounded-xl overflow-hidden border border-gray-200"
+                  className="relative h-40 w-full overflow-hidden rounded-xl border border-gray-200 sm:h-32 sm:w-32"
                 >
                   <img src={screenshot} alt="Screenshot" className="w-full h-full object-cover" />
                   <button
@@ -200,7 +200,7 @@ const Feedback: React.FC<FeedbackProps> = ({ user }) => {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-32 h-32 rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-green-500 hover:text-green-600 hover:bg-green-50/30 transition-all"
+                className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 text-gray-500 transition-all hover:border-green-500 hover:bg-green-50/30 hover:text-green-600 sm:w-32"
               >
                 <Camera className="w-6 h-6" />
                 <span className="text-xs font-medium">点击上传</span>
@@ -276,7 +276,7 @@ const Feedback: React.FC<FeedbackProps> = ({ user }) => {
       <div className="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* 用户需求墙 */}
-        <div className="p-8 bg-white dark:bg-[#1A1A1A] rounded-[32px] border border-slate-100 dark:border-white/5 shadow-2xl shadow-blue-500/5 relative overflow-hidden">
+        <div className="p-5 sm:p-8 bg-white dark:bg-[#1A1A1A] rounded-[32px] border border-slate-100 dark:border-white/5 shadow-2xl shadow-blue-500/5 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
              <MessageSquare size={100} className="text-blue-500" />
           </div>

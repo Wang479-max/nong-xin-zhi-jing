@@ -8,7 +8,7 @@ export const ToastContainer: React.FC = () => {
   const { toasts, removeToast } = useNotifications();
 
   return (
-    <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none w-full max-w-sm">
+    <div className="fixed left-3 right-3 top-3 z-[9999] flex w-auto max-w-sm flex-col gap-3 pointer-events-none sm:left-auto sm:right-6 sm:top-6 sm:w-full">
       <AnimatePresence mode="popLayout">
         {toasts.map((toast) => (
           <motion.div
@@ -44,8 +44,10 @@ export const ToastContainer: React.FC = () => {
             </div>
 
             <button
+              type="button"
+              aria-label="关闭通知"
               onClick={() => removeToast(toast.id)}
-              className="shrink-0 p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-colors"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-current dark:hover:bg-white/10"
             >
               <X size={16} className="opacity-40 dark:opacity-60" />
             </button>
