@@ -654,12 +654,13 @@ export default function Dashboard({ onNavigate, user }: DashboardProps) {
           {/* Top Integrated Interactive Cockpit Header */}
           <header className="flex flex-col xxl:flex-row xxl:items-center justify-between gap-8 select-none border-b border-slate-100 dark:border-slate-800 pb-8 transition-colors">
             <div className="flex flex-col gap-2">
-               <div className="flex items-center gap-4">
+               <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                   <div className="px-3 py-1 bg-slate-950 dark:bg-slate-800 text-white text-[10px] font-black rounded-lg uppercase tracking-widest font-mono">
                     PRO MODEL V5.0
                   </div>
-                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-slate-50 tracking-tighter uppercase italic flex items-center gap-2">
-                    <span className="text-emerald-500 not-italic font-black">NONG_XIN</span> 农芯智境系统
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 dark:text-slate-50 tracking-tighter uppercase italic flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-emerald-500 not-italic font-black">NONG_XIN</span>
+                    <span className="whitespace-nowrap not-italic">农芯智境系统</span>
                   </h1>
                </div>
                <div className="flex items-center gap-4 text-slate-400 text-xs font-bold leading-none">

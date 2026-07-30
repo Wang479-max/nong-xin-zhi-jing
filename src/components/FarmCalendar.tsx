@@ -373,6 +373,7 @@ export default function FarmCalendarWidget({ user }: { user: any }) {
                     <RippleEffect ripples={ripples} />
                   </button>
                   <button 
+                    aria-label="关闭农事日历"
                     onClick={() => setIsCalendarOpen(false)} 
                     className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-100 bg-white text-slate-400 shadow-sm transition-colors hover:text-slate-700 dark:border-white/5 dark:bg-white/5 dark:hover:text-white sm:h-12 sm:w-12 sm:rounded-2xl"
                   >

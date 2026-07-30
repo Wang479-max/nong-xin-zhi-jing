@@ -399,7 +399,7 @@ const StatusBar = ({ user }: { user: any }) => {
   }, []);
 
   return (
-    <div className="min-h-6 bg-white dark:bg-[#0A0A0A] border-t border-slate-200/50 dark:border-white/5 flex flex-col sm:flex-row flex-wrap items-center justify-center sm:justify-between px-4 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 select-none z-[100] gap-y-1">
+    <div className="hidden min-h-6 bg-white dark:bg-[#0A0A0A] border-t border-slate-200/50 dark:border-white/5 md:flex md:flex-row flex-wrap items-center justify-center md:justify-between px-4 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 select-none z-[100] gap-y-1">
       <div className="flex items-center gap-2 sm:gap-4 flex-wrap justify-center">
         <div className="flex items-center gap-1.5">
           <div className={cn(

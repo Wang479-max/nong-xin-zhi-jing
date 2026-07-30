@@ -268,7 +268,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, user, on
                   </div>
                   {t('settings.title')}
                 </h2>
-                <button onClick={onClose} className="md:hidden p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-white/50 dark:hover:bg-white/10 transition-colors">
+                <button aria-label="关闭系统设置" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-white/50 hover:text-slate-600 focus-visible:outline-2 focus-visible:outline-emerald-500 dark:hover:bg-white/10 dark:hover:text-slate-200 md:hidden">
                   <X size={20} />
                 </button>
               </div>

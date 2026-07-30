@@ -89,4 +89,26 @@ describe('mobile module layout contracts', () => {
     expect(read('src/components/mobile/MobileMoreSheet.tsx')).toContain('onNotifications');
     expect(read('src/components/mobile/MobileMoreSheet.tsx')).toContain('onWeather');
   });
+
+  it('keeps the desktop keyboard shortcut card off phone screens', () => {
+    expect(read('src/components/ShortcutFloatingCard.tsx')).toContain('hidden md:block');
+  });
+
+  it('keeps the desktop status bar from covering mobile navigation', () => {
+    expect(read('src/App.tsx')).toContain('hidden min-h-6');
+    expect(read('src/App.tsx')).toContain('md:flex md:flex-row');
+  });
+
+  it('keeps toast notifications inside narrow phone viewports', () => {
+    expect(read('src/components/ToastContainer.tsx'))
+      .toContain('left-3 right-3');
+  });
+
+  it('keeps the dashboard brand horizontal on 320px screens', () => {
+    const dashboard = read('src/components/Dashboard.tsx');
+
+    expect(dashboard)
+      .toContain('flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4');
+    expect(dashboard).toContain('whitespace-nowrap not-italic');
+  });
 });

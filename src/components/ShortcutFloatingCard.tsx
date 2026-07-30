@@ -188,7 +188,7 @@ export default function ShortcutFloatingCard() {
   if (hiddenForTour) return null;
 
   return (
-    <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-[90] select-none pointer-events-none sm:bottom-10 sm:left-[110px] sm:right-auto lg:left-[315px]">
+    <div className="hidden md:block fixed bottom-10 left-[110px] right-auto z-[90] select-none pointer-events-none lg:left-[315px]">
       <div className="pointer-events-auto">
         <AnimatePresence mode="wait">
           {isCollapsed ? (
